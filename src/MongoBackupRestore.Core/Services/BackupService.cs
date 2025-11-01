@@ -14,6 +14,7 @@ public class BackupService : IBackupService
     private readonly IMongoToolsValidator _toolsValidator;
     private readonly IMongoConnectionValidator? _connectionValidator;
     private readonly IDockerContainerDetector? _containerDetector;
+    private readonly ICompressionService? _compressionService;
     private readonly ILogger<BackupService> _logger;
 
     public BackupService(
@@ -21,12 +22,14 @@ public class BackupService : IBackupService
         IMongoToolsValidator toolsValidator,
         ILogger<BackupService> logger,
         IMongoConnectionValidator? connectionValidator = null,
-        IDockerContainerDetector? containerDetector = null)
+        IDockerContainerDetector? containerDetector = null,
+        ICompressionService? compressionService = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
         _connectionValidator = connectionValidator;
         _containerDetector = containerDetector;
+        _compressionService = compressionService;
         _logger = logger;
     }
 
@@ -204,11 +207,24 @@ public class BackupService : IBackupService
             var message = $"Backup completado exitosamente para la base de datos '{options.Database}'";
             _logger.LogInformation(message);
 
+            // Comprimir el backup si se especificó un formato de compresión
+            var backupPath = options.OutputPath;
+            if (options.CompressionFormat != CompressionFormat.None)
+            {
+                var compressionResult = await CompressBackupAsync(options, cancellationToken);
+                if (!compressionResult.Success)
+                {
+                    return compressionResult;
+                }
+                backupPath = compressionResult.BackupPath!;
+                message = $"Backup completado y comprimido exitosamente para la base de datos '{options.Database}'";
+            }
+
             return new BackupResult
             {
                 Success = true,
                 Message = message,
-                BackupPath = options.OutputPath,
+                BackupPath = backupPath,
                 ExitCode = exitCode,
                 Output = output,
                 Error = error
@@ -275,11 +291,24 @@ public class BackupService : IBackupService
         var successMessage = $"Backup completado exitosamente para la base de datos '{options.Database}' desde el contenedor '{options.ContainerName}'";
         _logger.LogInformation(successMessage);
 
+        // Comprimir el backup si se especificó un formato de compresión
+        var backupPath = options.OutputPath;
+        if (options.CompressionFormat != CompressionFormat.None)
+        {
+            var compressionResult = await CompressBackupAsync(options, cancellationToken);
+            if (!compressionResult.Success)
+            {
+                return compressionResult;
+            }
+            backupPath = compressionResult.BackupPath!;
+            successMessage = $"Backup completado y comprimido exitosamente para la base de datos '{options.Database}' desde el contenedor '{options.ContainerName}'";
+        }
+
         return new BackupResult
         {
             Success = true,
             Message = successMessage,
-            BackupPath = options.OutputPath,
+            BackupPath = backupPath,
             ExitCode = 0,
             Output = output,
             Error = error
@@ -546,5 +575,57 @@ public class BackupService : IBackupService
 
         _logger.LogInformation("Contenedor Docker validado: {ContainerName}", options.ContainerName);
         return new BackupResult { Success = true };
+    }
+
+    private async Task<BackupResult> CompressBackupAsync(BackupOptions options, CancellationToken cancellationToken)
+    {
+        if (_compressionService == null)
+        {
+            return new BackupResult
+            {
+                Success = false,
+                Message = "El servicio de compresión no está disponible. No se puede comprimir el backup.",
+                ExitCode = 1
+            };
+        }
+
+        try
+        {
+            _logger.LogInformation("Iniciando compresión del backup en formato {Format}...", options.CompressionFormat);
+            
+            var destinationFile = Path.Combine(
+                Path.GetDirectoryName(options.OutputPath) ?? ".",
+                $"{Path.GetFileName(options.OutputPath)}_{DateTime.Now:yyyyMMdd_HHmmss}");
+
+            var compressedFilePath = await _compressionService.CompressAsync(
+                options.OutputPath,
+                destinationFile,
+                options.CompressionFormat,
+                message => _logger.LogInformation(message),
+                cancellationToken);
+
+            // Eliminar el directorio sin comprimir después de la compresión exitosa
+            if (Directory.Exists(options.OutputPath))
+            {
+                _logger.LogDebug("Eliminando directorio sin comprimir: {OutputPath}", options.OutputPath);
+                Directory.Delete(options.OutputPath, recursive: true);
+            }
+
+            return new BackupResult
+            {
+                Success = true,
+                BackupPath = compressedFilePath
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al comprimir el backup");
+            return new BackupResult
+            {
+                Success = false,
+                Message = $"Error al comprimir el backup: {ex.Message}",
+                ExitCode = 1
+            };
+        }
     }
 }

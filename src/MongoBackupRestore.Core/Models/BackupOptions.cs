@@ -59,4 +59,9 @@ public class BackupOptions
     /// Nivel de verbosidad para logs
     /// </summary>
     public bool Verbose { get; set; }
+
+    /// <summary>
+    /// Formato de compresión para el backup (None, Zip, TarGz)
+    /// </summary>
+    public CompressionFormat CompressionFormat { get; set; } = CompressionFormat.None;
 }

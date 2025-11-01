@@ -14,6 +14,7 @@ public class RestoreService : IRestoreService
     private readonly IMongoToolsValidator _toolsValidator;
     private readonly IMongoConnectionValidator? _connectionValidator;
     private readonly IDockerContainerDetector? _containerDetector;
+    private readonly ICompressionService? _compressionService;
     private readonly ILogger<RestoreService> _logger;
 
     public RestoreService(
@@ -21,12 +22,14 @@ public class RestoreService : IRestoreService
         IMongoToolsValidator toolsValidator,
         ILogger<RestoreService> logger,
         IMongoConnectionValidator? connectionValidator = null,
-        IDockerContainerDetector? containerDetector = null)
+        IDockerContainerDetector? containerDetector = null,
+        ICompressionService? compressionService = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
         _connectionValidator = connectionValidator;
         _containerDetector = containerDetector;
+        _compressionService = compressionService;
         _logger = logger;
     }
 
@@ -100,14 +103,57 @@ public class RestoreService : IRestoreService
             return pathValidationResult;
         }
 
-        // Ejecutar restore según el modo
-        if (options.InDocker)
+        // Descomprimir el backup si está comprimido
+        string sourcePathToRestore = options.SourcePath;
+        string? tempDecompressedPath = null;
+        
+        if (_compressionService != null)
         {
-            return await ExecuteDockerRestoreAsync(options, cancellationToken);
+            var detectedFormat = _compressionService.DetectFormat(options.SourcePath);
+            
+            // Si se detectó un formato comprimido o se especificó explícitamente
+            if (detectedFormat != CompressionFormat.None || options.CompressionFormat != CompressionFormat.None)
+            {
+                var decompressResult = await DecompressBackupAsync(options, cancellationToken);
+                if (!decompressResult.Success)
+                {
+                    return decompressResult;
+                }
+                tempDecompressedPath = decompressResult.DecompressedPath;
+                sourcePathToRestore = tempDecompressedPath!;
+            }
         }
-        else
+
+        try
         {
-            return await ExecuteLocalRestoreAsync(options, cancellationToken);
+            // Ejecutar restore según el modo
+            RestoreResult result;
+            if (options.InDocker)
+            {
+                result = await ExecuteDockerRestoreAsync(options, sourcePathToRestore, cancellationToken);
+            }
+            else
+            {
+                result = await ExecuteLocalRestoreAsync(options, sourcePathToRestore, cancellationToken);
+            }
+            
+            return result;
+        }
+        finally
+        {
+            // Limpiar directorio temporal descomprimido
+            if (tempDecompressedPath != null && Directory.Exists(tempDecompressedPath))
+            {
+                try
+                {
+                    _logger.LogDebug("Eliminando directorio temporal descomprimido: {TempPath}", tempDecompressedPath);
+                    Directory.Delete(tempDecompressedPath, recursive: true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error al eliminar directorio temporal");
+                }
+            }
         }
     }
 
@@ -253,11 +299,11 @@ public class RestoreService : IRestoreService
         return !string.IsNullOrWhiteSpace(options.Username) || !string.IsNullOrWhiteSpace(options.Uri);
     }
 
-    private async Task<RestoreResult> ExecuteLocalRestoreAsync(RestoreOptions options, CancellationToken cancellationToken)
+    private async Task<RestoreResult> ExecuteLocalRestoreAsync(RestoreOptions options, string sourcePath, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Ejecutando restauración local...");
 
-        var arguments = BuildMongoRestoreArguments(options);
+        var arguments = BuildMongoRestoreArguments(options, sourcePath);
         var commandName = MongoToolsValidator.GetMongoCommandName("mongorestore");
         
         _logger.LogDebug("Comando: {Command} {Arguments}", commandName, arguments);
@@ -298,7 +344,7 @@ public class RestoreService : IRestoreService
         }
     }
 
-    private async Task<RestoreResult> ExecuteDockerRestoreAsync(RestoreOptions options, CancellationToken cancellationToken)
+    private async Task<RestoreResult> ExecuteDockerRestoreAsync(RestoreOptions options, string sourcePath, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Ejecutando restauración en contenedor Docker: {ContainerName}", options.ContainerName);
 
@@ -306,7 +352,7 @@ public class RestoreService : IRestoreService
         var tempPath = "/tmp/mongodb-restore";
         
         // Copiar el backup al contenedor
-        var copyResult = await CopyBackupToContainerAsync(options, tempPath, cancellationToken);
+        var copyResult = await CopyBackupToContainerAsync(options, sourcePath, tempPath, cancellationToken);
         if (!copyResult.Success)
         {
             return copyResult;
@@ -356,6 +402,7 @@ public class RestoreService : IRestoreService
 
     private async Task<RestoreResult> CopyBackupToContainerAsync(
         RestoreOptions options,
+        string sourcePath,
         string containerPath,
         CancellationToken cancellationToken)
     {
@@ -367,7 +414,7 @@ public class RestoreService : IRestoreService
             throw new InvalidOperationException("El nombre del contenedor no puede ser nulo en este punto");
         }
 
-        var copyArgs = $"cp {options.SourcePath}/. {options.ContainerName}:{containerPath}";
+        var copyArgs = $"cp {sourcePath}/. {options.ContainerName}:{containerPath}";
         var (exitCode, output, error) = await _processRunner.RunProcessAsync(
             "docker",
             copyArgs,
@@ -409,7 +456,7 @@ public class RestoreService : IRestoreService
         }
     }
 
-    private string BuildMongoRestoreArguments(RestoreOptions options)
+    private string BuildMongoRestoreArguments(RestoreOptions options, string sourcePath)
     {
         var args = new StringBuilder();
 
@@ -459,7 +506,7 @@ public class RestoreService : IRestoreService
         }
 
         // Ruta de origen del backup
-        args.Append($" {options.SourcePath}");
+        args.Append($" {sourcePath}");
 
         return args.ToString();
     }
@@ -628,5 +675,72 @@ public class RestoreService : IRestoreService
 
         _logger.LogInformation("Contenedor Docker validado: {ContainerName}", options.ContainerName);
         return new RestoreResult { Success = true };
+    }
+
+    private async Task<RestoreResult> DecompressBackupAsync(RestoreOptions options, CancellationToken cancellationToken)
+    {
+        if (_compressionService == null)
+        {
+            return new RestoreResult
+            {
+                Success = false,
+                Message = "El servicio de compresión no está disponible. No se puede descomprimir el backup.",
+                ExitCode = 1
+            };
+        }
+
+        try
+        {
+            var format = options.CompressionFormat != CompressionFormat.None 
+                ? options.CompressionFormat 
+                : _compressionService.DetectFormat(options.SourcePath);
+
+            if (format == CompressionFormat.None)
+            {
+                // No está comprimido, usar directamente
+                return new RestoreResult
+                {
+                    Success = true,
+                    DecompressedPath = options.SourcePath
+                };
+            }
+
+            _logger.LogInformation("Descomprimiendo backup desde formato {Format}...", format);
+            
+            var tempDirectory = Path.Combine(Path.GetTempPath(), $"mongodb-restore-{Guid.NewGuid()}");
+            Directory.CreateDirectory(tempDirectory);
+
+            var success = await _compressionService.DecompressAsync(
+                options.SourcePath,
+                tempDirectory,
+                message => _logger.LogInformation(message),
+                cancellationToken);
+
+            if (!success)
+            {
+                return new RestoreResult
+                {
+                    Success = false,
+                    Message = "Error al descomprimir el backup",
+                    ExitCode = 1
+                };
+            }
+
+            return new RestoreResult
+            {
+                Success = true,
+                DecompressedPath = tempDirectory
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al descomprimir el backup");
+            return new RestoreResult
+            {
+                Success = false,
+                Message = $"Error al descomprimir el backup: {ex.Message}",
+                ExitCode = 1
+            };
+        }
     }
 }
