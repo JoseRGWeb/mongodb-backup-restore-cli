@@ -18,7 +18,7 @@ Este proyecto sigue buenas prácticas de repositorios, versionado semántico y c
 - Soporte de autenticación (usuario/contraseña y authSource).
 - **Compresión de backups (ZIP/TAR.GZ)** ✓
 - Directorio de salida configurable.
-- Políticas de retención [roadmap].
+- **Políticas de retención y limpieza automática de backups antiguos** ✓
 - Cifrado de backups [roadmap].
 - Logs estructurados y niveles de verbosidad.
 - Integración CI/CD con GitHub Actions [roadmap].
@@ -88,6 +88,19 @@ export MONGO_COMPRESSION=zip
 mongodb-br backup --db MyDatabase --out ./backups/2025-11-01
 ```
 
+- **Backup con retención de 30 días (limpieza automática de backups antiguos)**:
+```bash
+mongodb-br backup --db MyDatabase --out ./backups/2025-11-01 --retention-days 30
+```
+> **Nota**: Después de realizar el backup exitosamente, se eliminarán automáticamente todos los backups (directorios y archivos comprimidos) en el directorio padre que tengan más de 30 días. Se registran logs detallados de las acciones de limpieza.
+
+- **Backup con compresión y retención usando variables de entorno**:
+```bash
+export MONGO_COMPRESSION=zip
+export MONGO_RETENTION_DAYS=7
+mongodb-br backup --db MyDatabase --out ./backups/2025-11-01
+```
+
 ### Ejemplos de restore
 - Restaurar a MongoDB local:
 ```bash
@@ -136,8 +149,8 @@ mongodb-br restore --db MyDatabase --from ./backups/backup.tar.gz --compress tar
 - `--from` Ruta de origen del backup (para `restore`).
 - `--compress` Formato de compresión: `none`, `zip`, `targz` (por defecto: `none`). También se puede configurar con la variable de entorno `MONGO_COMPRESSION`.
 - `--drop` Eliminar la base de datos antes de restaurar (solo para `restore`).
+- `--retention-days` o `-r` Número de días de retención para backups (para `backup`). Los backups más antiguos que este período serán eliminados automáticamente después de realizar un backup exitoso. También se puede configurar con la variable de entorno `MONGO_RETENTION_DAYS`.
 - `--encrypt` Habilitar cifrado [roadmap].
-- `--retention-days` Días a conservar [roadmap].
 - `--verbose` Aumenta la verbosidad de logs.
 
 ## Modo Docker
@@ -164,6 +177,7 @@ Esto asegura que las operaciones fallen rápidamente con mensajes claros si falt
 - `MONGO_HOST`, `MONGO_PORT`
 - `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_AUTH_DB`
 - `MONGO_COMPRESSION` - Formato de compresión para backups (none, zip, targz)
+- `MONGO_RETENTION_DAYS` - Número de días de retención para limpieza automática de backups antiguos
 - `DOCKER_CONTEXT` (para escenarios de Docker remoto en roadmap)
 - `MONGOBR_OUT_DIR` (directorio por defecto de backups)
 
@@ -214,16 +228,16 @@ README.md
 
 Guía de contribución y Código de Conducta se añadirán en el roadmap.
 
-## Roadmap (issues a crear)
-- CLI: comandos `backup` y `restore` con opciones principales.
-- Soporte de `--uri` y autenticación.
-- Modo Docker local (`docker exec`) con detección de binarios.
-- Compresión de backups (zip/tar.gz).
-- Retención de backups por días y limpieza segura.
-- Cifrado AES opcional de backups.
-- Logs estructurados y `--verbose`.
-- CI GitHub Actions (build + test).
-- Publicación como .NET global tool.
+## Roadmap
+- ✅ CLI: comandos `backup` y `restore` con opciones principales.
+- ✅ Soporte de `--uri` y autenticación.
+- ✅ Modo Docker local (`docker exec`) con detección de binarios.
+- ✅ Compresión de backups (zip/tar.gz).
+- ✅ Retención de backups por días y limpieza segura.
+- [ ] Cifrado AES opcional de backups.
+- ✅ Logs estructurados y `--verbose`.
+- [ ] CI GitHub Actions (build + test).
+- [ ] Publicación como .NET global tool.
 - Documentación de ejemplos end-to-end.
 
 ## Licencia
