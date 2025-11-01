@@ -1,0 +1,54 @@
+---
+name: Build y Test
+
+# Este workflow compila la solución .NET y ejecuta todas las pruebas
+"on":
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build-and-test:
+    name: Compilar y Probar
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restaurar dependencias
+        run: dotnet restore
+
+      - name: Compilar solución
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Ejecutar pruebas
+        run: |
+          dotnet test --no-build --configuration Release \
+            --verbosity normal \
+            --logger "trx;LogFileName=test-results.trx"
+
+      - name: Publicar resultados de pruebas
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: |
+            **/test-results.trx
+          check_name: Resultados de Pruebas
+          comment_title: Resultados de Pruebas
+
+      - name: Subir artefactos de build
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            src/MongoBackupRestore.Cli/bin/Release/
+            src/MongoBackupRestore.Core/bin/Release/
+          retention-days: 7
