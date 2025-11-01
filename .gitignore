@@ -1,0 +1,55 @@
+# Compilación .NET / Visual Studio
+bin/
+obj/
+out/
+[Bb]uild/
+[Dd]ebug*/
+[Rr]elease*/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+[Ll]og/
+[Ll]ogs/
+
+# VS/IDE
+.vs/
+.vscode/
+.idea/
+
+# Test results
+TestResult*/
+[Test]Results/
+*.trx
+*.coverage
+*.coveragexml
+
+# Paquetes / artefactos
+*.nupkg
+*.snupkg
+packages/
+.nuget/packages/
+
+# Usuario/entornos locales
+*.user
+*.userosscache
+*.suo
+*.sln.docstates
+
+# Archivos de bloqueo/temporales
+*.lock.json
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Herramientas
+coverage/
+reports/
