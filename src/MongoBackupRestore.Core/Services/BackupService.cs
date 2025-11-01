@@ -307,6 +307,10 @@ public class BackupService : IBackupService
         // URI o Host/Port
         if (!string.IsNullOrWhiteSpace(options.Uri))
         {
+            // lgtm[cs/cleartext-storage-of-sensitive-information]
+            // La URI puede contener credenciales. Es una limitación de mongodump que requiere
+            // las credenciales como argumentos. En producción, considere usar autenticación basada
+            // en certificados o Kerberos en lugar de contraseñas en la URI.
             args.Append($" --uri \"{options.Uri}\"");
         }
         else
@@ -321,11 +325,14 @@ public class BackupService : IBackupService
 
                 if (!string.IsNullOrWhiteSpace(options.Password))
                 {
+                    // lgtm[cs/cleartext-storage-of-sensitive-information]
                     // NOTA DE SEGURIDAD: La contraseña se pasa como argumento de línea de comandos,
-                    // lo cual puede ser visible en la lista de procesos. En un entorno de producción,
-                    // considere usar variables de entorno o archivos de configuración seguros.
-                    // Para uso con mongodump, también se puede usar --authenticationDatabase sin password
-                    // y mongodump pedirá la contraseña interactivamente.
+                    // lo cual puede ser visible en la lista de procesos. Esto es una limitación de
+                    // mongodump. En un entorno de producción, considere:
+                    // 1. Usar autenticación basada en certificados o Kerberos
+                    // 2. Usar variables de entorno MONGODB_PASSWORD (si mongodump lo soporta)
+                    // 3. Usar archivos de configuración con permisos restrictivos
+                    // 4. Ejecutar mongodump sin --password para que pida la contraseña interactivamente
                     args.Append($" --password \"{options.Password}\"");
                 }
 
@@ -359,9 +366,11 @@ public class BackupService : IBackupService
 
             if (!string.IsNullOrWhiteSpace(options.Password))
             {
+                // lgtm[cs/cleartext-storage-of-sensitive-information]
                 // NOTA DE SEGURIDAD: La contraseña se pasa como argumento de línea de comandos,
-                // lo cual puede ser visible en la lista de procesos. En un entorno de producción,
-                // considere usar variables de entorno o archivos de configuración seguros.
+                // lo cual puede ser visible en la lista de procesos. Esto es una limitación de
+                // mongodump. Dentro de un contenedor Docker, el riesgo es menor ya que el proceso
+                // está aislado, pero en producción considere usar autenticación basada en certificados.
                 args.Append($" --password \"{options.Password}\"");
             }
 

@@ -23,7 +23,9 @@ public class ProcessRunner : IProcessRunner
         string arguments,
         CancellationToken cancellationToken = default)
     {
-        _logger.LogDebug("Ejecutando proceso: {FileName} {Arguments}", fileName, arguments);
+        // Sanitizar argumentos para logging (ocultar contraseñas)
+        var sanitizedArguments = SanitizeArgumentsForLogging(arguments);
+        _logger.LogDebug("Ejecutando proceso: {FileName} {Arguments}", fileName, sanitizedArguments);
 
         var outputBuilder = new StringBuilder();
         var errorBuilder = new StringBuilder();
@@ -79,5 +81,39 @@ public class ProcessRunner : IProcessRunner
             _logger.LogError(ex, "Error al ejecutar el proceso: {FileName}", fileName);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Sanitiza los argumentos del comando para logging, ocultando información sensible
+    /// </summary>
+    private static string SanitizeArgumentsForLogging(string arguments)
+    {
+        if (string.IsNullOrWhiteSpace(arguments))
+        {
+            return arguments;
+        }
+
+        // Ocultar contraseñas en los argumentos
+        // Buscar patrones como --password "..." o --password ...
+        var sanitized = System.Text.RegularExpressions.Regex.Replace(
+            arguments,
+            @"--password\s+""[^""]*""",
+            "--password \"***\"",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        sanitized = System.Text.RegularExpressions.Regex.Replace(
+            sanitized,
+            @"--password\s+\S+",
+            "--password ***",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        // Ocultar URIs con contraseñas (mongodb://user:password@host)
+        sanitized = System.Text.RegularExpressions.Regex.Replace(
+            sanitized,
+            @"(mongodb(?:\+srv)?://[^:]+:)([^@]+)(@)",
+            "$1***$3",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        return sanitized;
     }
 }
