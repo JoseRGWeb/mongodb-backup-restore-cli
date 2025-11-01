@@ -34,4 +34,9 @@ public class RestoreResult
     /// Ruta del directorio descomprimido temporal (usado internamente)
     /// </summary>
     public string? DecompressedPath { get; set; }
+
+    /// <summary>
+    /// Ruta del archivo descifrado temporal (usado internamente)
+    /// </summary>
+    public string? DecryptedPath { get; set; }
 }

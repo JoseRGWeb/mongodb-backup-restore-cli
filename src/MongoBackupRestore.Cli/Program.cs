@@ -27,14 +27,17 @@ var containerDetector = new DockerContainerDetector(processRunner, containerDete
 var compressionServiceLogger = loggerFactory.CreateLogger<CompressionService>();
 var compressionService = new CompressionService(compressionServiceLogger, processRunner);
 
+var encryptionServiceLogger = loggerFactory.CreateLogger<EncryptionService>();
+var encryptionService = new EncryptionService(encryptionServiceLogger);
+
 var retentionServiceLogger = loggerFactory.CreateLogger<BackupRetentionService>();
 var retentionService = new BackupRetentionService(retentionServiceLogger);
 
 var backupServiceLogger = loggerFactory.CreateLogger<BackupService>();
-var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger, connectionValidator, containerDetector, compressionService, retentionService);
+var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger, connectionValidator, containerDetector, compressionService, retentionService, encryptionService);
 
 var restoreServiceLogger = loggerFactory.CreateLogger<RestoreService>();
-var restoreService = new RestoreService(processRunner, toolsValidator, restoreServiceLogger, connectionValidator, containerDetector, compressionService);
+var restoreService = new RestoreService(processRunner, toolsValidator, restoreServiceLogger, connectionValidator, containerDetector, compressionService, encryptionService);
 
 // Crear comando raíz
 var rootCommand = new RootCommand("MongoDB Backup & Restore CLI - Herramienta para gestionar copias de seguridad de MongoDB");
@@ -144,6 +147,19 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
         });
     retentionDaysOption.AddAlias("-r");
 
+    // Opciones de cifrado
+    var encryptOption = new Option<bool>(
+        name: "--encrypt",
+        description: "Cifrar el backup usando AES-256",
+        getDefaultValue: () => false);
+    encryptOption.AddAlias("-e");
+
+    var encryptionKeyOption = new Option<string?>(
+        name: "--encryption-key",
+        description: "Clave de cifrado AES-256 (mínimo 16 caracteres). También se puede usar la variable de entorno MONGO_ENCRYPTION_KEY",
+        getDefaultValue: () => Environment.GetEnvironmentVariable("MONGO_ENCRYPTION_KEY"));
+    encryptionKeyOption.AddAlias("-k");
+
     // Agregar opciones al comando
     command.AddOption(dbOption);
     command.AddOption(outOption);
@@ -158,6 +174,8 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
     command.AddOption(verboseOption);
     command.AddOption(compressOption);
     command.AddOption(retentionDaysOption);
+    command.AddOption(encryptOption);
+    command.AddOption(encryptionKeyOption);
 
     // Handler del comando
     command.SetHandler(async (context) =>
@@ -175,6 +193,8 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
         var verbose = context.ParseResult.GetValueForOption(verboseOption);
         var compress = context.ParseResult.GetValueForOption(compressOption);
         var retentionDays = context.ParseResult.GetValueForOption(retentionDaysOption);
+        var encrypt = context.ParseResult.GetValueForOption(encryptOption);
+        var encryptionKey = context.ParseResult.GetValueForOption(encryptionKeyOption);
 
         // Configurar nivel de log según verbosidad
         if (verbose)
@@ -209,7 +229,9 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
             ContainerName = containerName,
             Verbose = verbose,
             CompressionFormat = compressionFormat,
-            RetentionDays = retentionDays
+            RetentionDays = retentionDays,
+            Encrypt = encrypt,
+            EncryptionKey = encryptionKey
         };
 
         try
@@ -352,6 +374,13 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
         description: "Formato de compresión del backup (none, zip, targz). Se auto-detecta si no se especifica.",
         getDefaultValue: () => Environment.GetEnvironmentVariable("MONGO_COMPRESSION") ?? "none");
 
+    // Opciones de cifrado
+    var encryptionKeyOption = new Option<string?>(
+        name: "--encryption-key",
+        description: "Clave de cifrado para descifrar el backup (si está cifrado). También se puede usar la variable de entorno MONGO_ENCRYPTION_KEY",
+        getDefaultValue: () => Environment.GetEnvironmentVariable("MONGO_ENCRYPTION_KEY"));
+    encryptionKeyOption.AddAlias("-k");
+
     // Agregar opciones al comando
     command.AddOption(dbOption);
     command.AddOption(fromOption);
@@ -366,6 +395,7 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
     command.AddOption(dropOption);
     command.AddOption(verboseOption);
     command.AddOption(compressOption);
+    command.AddOption(encryptionKeyOption);
 
     // Handler del comando
     command.SetHandler(async (context) =>
@@ -383,6 +413,7 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
         var drop = context.ParseResult.GetValueForOption(dropOption);
         var verbose = context.ParseResult.GetValueForOption(verboseOption);
         var compress = context.ParseResult.GetValueForOption(compressOption);
+        var encryptionKey = context.ParseResult.GetValueForOption(encryptionKeyOption);
 
         // Configurar nivel de log según verbosidad
         if (verbose)
@@ -417,7 +448,8 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
             ContainerName = containerName,
             Drop = drop,
             Verbose = verbose,
-            CompressionFormat = compressionFormat
+            CompressionFormat = compressionFormat,
+            EncryptionKey = encryptionKey
         };
 
         try

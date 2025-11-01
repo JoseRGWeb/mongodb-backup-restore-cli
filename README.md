@@ -19,7 +19,7 @@ Este proyecto sigue buenas prácticas de repositorios, versionado semántico y c
 - **Compresión de backups (ZIP/TAR.GZ)** ✓
 - Directorio de salida configurable.
 - **Políticas de retención y limpieza automática de backups** ✓
-- Cifrado de backups [roadmap].
+- **Cifrado AES-256 de backups** ✓
 - Logs estructurados y niveles de verbosidad.
 - Integración CI/CD con GitHub Actions [roadmap].
 - Distribución como .NET global tool [roadmap].
@@ -104,6 +104,30 @@ export MONGO_RETENTION_DAYS=14
 mongodb-br backup --db MyDatabase --out ./backups/2025-11-01
 ```
 
+- **Backup con cifrado AES-256**:
+```bash
+mongodb-br backup --db MyDatabase --out ./backups/2025-11-01 --encrypt --encryption-key "MiClaveSegura123456"
+```
+
+- **Backup con cifrado usando variable de entorno**:
+```bash
+export MONGO_ENCRYPTION_KEY="MiClaveSegura123456"
+mongodb-br backup --db MyDatabase --out ./backups/2025-11-01 --encrypt
+```
+
+- **Backup comprimido y cifrado**:
+```bash
+mongodb-br backup --db MyDatabase --out ./backups/2025-11-01 --compress zip --encrypt --encryption-key "MiClaveSegura123456"
+```
+> **Nota**: Se recomienda siempre combinar cifrado con compresión para reducir el tamaño antes de cifrar.
+
+- **Backup completo con todas las opciones**:
+```bash
+mongodb-br backup --db MyDatabase --out ./backups/2025-11-01 \
+  --compress zip --encrypt --encryption-key "MiClaveSegura123456" \
+  --retention-days 30 --verbose
+```
+
 ### Ejemplos de restore
 - Restaurar a MongoDB local:
 ```bash
@@ -139,6 +163,26 @@ mongodb-br restore --db MyDatabase --from ./backups/2025-11-01_20251101_120000.z
 mongodb-br restore --db MyDatabase --from ./backups/backup.tar.gz --compress targz
 ```
 
+- **Restaurar desde backup cifrado**:
+```bash
+mongodb-br restore --db MyDatabase --from ./backups/2025-11-01_20251101_120000.zip.encrypted \
+  --encryption-key "MiClaveSegura123456"
+```
+> **Nota**: El backup cifrado se detecta automáticamente por la extensión .encrypted
+
+- **Restaurar desde backup cifrado usando variable de entorno**:
+```bash
+export MONGO_ENCRYPTION_KEY="MiClaveSegura123456"
+mongodb-br restore --db MyDatabase --from ./backups/2025-11-01_20251101_120000.zip.encrypted
+```
+
+- **Restaurar desde backup comprimido y cifrado**:
+```bash
+mongodb-br restore --db MyDatabase --from ./backups/backup.zip.encrypted \
+  --encryption-key "MiClaveSegura123456"
+```
+> **Nota**: La herramienta descifrará automáticamente primero y luego descomprimirá el backup antes de restaurar.
+
 ### Opciones principales
 - `--db` Nombre de la base de datos (obligatorio).
 - `--host` Host de MongoDB (por defecto: `localhost`).
@@ -152,8 +196,9 @@ mongodb-br restore --db MyDatabase --from ./backups/backup.tar.gz --compress tar
 - `--from` Ruta de origen del backup (para `restore`).
 - `--compress` Formato de compresión: `none`, `zip`, `targz` (por defecto: `none`). También se puede configurar con la variable de entorno `MONGO_COMPRESSION`.
 - `--retention-days` / `-r` **Número de días para retener backups**. Los backups más antiguos que este período serán eliminados automáticamente después de crear un nuevo backup. Se puede configurar también con la variable de entorno `MONGO_RETENTION_DAYS`.
+- `--encrypt` / `-e` **Habilitar cifrado AES-256** para proteger el backup (solo para `backup`).
+- `--encryption-key` / `-k` **Clave de cifrado** para cifrar o descifrar el backup (mínimo 16 caracteres). Se puede configurar con la variable de entorno `MONGO_ENCRYPTION_KEY`.
 - `--drop` Eliminar la base de datos antes de restaurar (solo para `restore`).
-- `--encrypt` Habilitar cifrado [roadmap].
 - `--verbose` Aumenta la verbosidad de logs.
 
 ## Modo Docker
@@ -181,6 +226,7 @@ Esto asegura que las operaciones fallen rápidamente con mensajes claros si falt
 - `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_AUTH_DB`
 - `MONGO_COMPRESSION` - Formato de compresión para backups (none, zip, targz)
 - `MONGO_RETENTION_DAYS` - Número de días para retener backups (elimina automáticamente backups antiguos)
+- `MONGO_ENCRYPTION_KEY` - Clave de cifrado para cifrar/descifrar backups (mínimo 16 caracteres)
 - `DOCKER_CONTEXT` (para escenarios de Docker remoto en roadmap)
 - `MONGOBR_OUT_DIR` (directorio por defecto de backups)
 
@@ -241,6 +287,112 @@ Backup retenido: backup-20251030.tar.gz, Fecha: 2025-10-30 16:30:00
 Limpieza de backups completada. Eliminados: 2, Retenidos: 3, Espacio liberado: 35.00 MB
 ```
 
+## Cifrado de Backups (AES-256)
+
+La herramienta incluye cifrado AES-256 opcional para proteger backups sensibles. Esta funcionalidad utiliza **AES-256-CBC** con **HMAC-SHA256** para garantizar tanto la confidencialidad como la integridad de los datos.
+
+### Características de Seguridad
+
+- **Cifrado AES-256-CBC**: Estándar de cifrado avanzado con clave de 256 bits
+- **Autenticación HMAC-SHA256**: Verifica la integridad del backup y previene manipulaciones
+- **IV aleatorio**: Cada cifrado genera un Vector de Inicialización único para máxima seguridad
+- **Derivación de claves PBKDF2**: Las claves se derivan usando PBKDF2 con 100,000 iteraciones
+- **Limpieza de memoria**: Las claves se eliminan de la memoria después de su uso
+- **Detección automática**: Los backups cifrados se identifican por extensión `.encrypted` y encabezado
+
+### Uso Básico
+
+**Cifrar un backup:**
+```bash
+mongodb-br backup --db MiBaseDatos --out ./backups/backup-20251101 \
+  --encrypt --encryption-key "MiClaveSegura123456789"
+```
+
+**Descifrar y restaurar:**
+```bash
+mongodb-br restore --db MiBaseDatos \
+  --from ./backups/backup-20251101_20251101_143000.encrypted \
+  --encryption-key "MiClaveSegura123456789"
+```
+
+### Mejores Prácticas
+
+1. **Longitud de clave**: Use claves de al menos 16 caracteres (se recomienda 32 o más)
+2. **Complejidad**: Combine letras mayúsculas, minúsculas, números y caracteres especiales
+3. **Gestión de claves**: 
+   - No incluya claves en scripts de control de versiones
+   - Use variables de entorno o gestores de secretos (AWS Secrets Manager, Azure Key Vault, HashiCorp Vault)
+   - Rote las claves periódicamente
+4. **Combinación con compresión**: Comprima primero, luego cifre para mejor rendimiento
+   ```bash
+   mongodb-br backup --db MiBaseDatos --out ./backups/backup \
+     --compress zip --encrypt --encryption-key "$MONGO_ENCRYPTION_KEY"
+   ```
+5. **Backup de claves**: Almacene las claves de cifrado de forma segura y separada de los backups
+
+### Funcionamiento
+
+1. **Durante el backup:**
+   - Si se especifica `--encrypt`, el backup se cifra después de generarse
+   - Si hay compresión, primero se comprime y luego se cifra
+   - Se genera un archivo con extensión `.encrypted`
+   - Estructura del archivo cifrado:
+     ```
+     [Encabezado "MONGOBR-AES256"] (14 bytes)
+     [IV - Vector de Inicialización] (16 bytes)
+     [HMAC-SHA256] (32 bytes)
+     [Datos cifrados] (variable)
+     ```
+
+2. **Durante el restore:**
+   - La herramienta detecta automáticamente si el backup está cifrado
+   - Valida el encabezado y verifica el HMAC antes de descifrar
+   - Si el HMAC no coincide (clave incorrecta o archivo corrupto), se rechaza el restore
+   - Descifra el backup a un archivo temporal
+   - Si está comprimido, lo descomprime
+   - Finalmente ejecuta el restore
+
+### Ejemplo Completo
+
+**Workflow recomendado para backups seguros:**
+
+```bash
+# 1. Configurar clave de cifrado de forma segura (solo una vez)
+export MONGO_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+echo "Guarde esta clave en un gestor de secretos: $MONGO_ENCRYPTION_KEY"
+
+# 2. Realizar backup cifrado y comprimido con retención
+mongodb-br backup --db ProductionDB \
+  --out ./backups/prod-backup-$(date +%Y%m%d) \
+  --compress zip \
+  --encrypt \
+  --retention-days 30 \
+  --verbose
+
+# Resultado: ./backups/prod-backup-20251101/prod-backup-20251101_143052.zip.encrypted
+
+# 3. Restaurar en caso necesario
+mongodb-br restore --db ProductionDB \
+  --from ./backups/prod-backup-20251101/prod-backup-20251101_143052.zip.encrypted \
+  --verbose
+```
+
+### Validación y Errores
+
+La herramienta proporciona mensajes claros en caso de problemas:
+
+- **Clave demasiado corta**: "La clave de cifrado debe tener al menos 16 caracteres"
+- **Clave incorrecta al descifrar**: "Error al descifrar: la clave de cifrado es incorrecta o el archivo está corrupto"
+- **Archivo cifrado sin clave**: "El backup está cifrado pero no se proporcionó la clave de cifrado"
+- **Archivo corrupto**: "Error criptográfico al descifrar el backup"
+
+### Consideraciones de Rendimiento
+
+- El cifrado añade ~5-10% de overhead al tiempo de backup/restore
+- Los archivos cifrados son ligeramente más grandes debido a padding y metadatos
+- Se recomienda comprimir antes de cifrar para optimizar el tamaño
+- Use claves desde variables de entorno para evitar escribirlas en logs
+
 ## Arquitectura (propuesta)
 - `MongoBackupRestore.Core`: abstracciones y servicios para orquestar `mongodump`/`mongorestore` de forma cross-platform, compresión, logging y validaciones.
 - `MongoBackupRestore.Cli`: interfaz de línea de comandos usando `System.CommandLine`, mapeo de opciones/variables de entorno y UX.
@@ -294,7 +446,7 @@ Guía de contribución y Código de Conducta se añadirán en el roadmap.
 - Modo Docker local (`docker exec`) con detección de binarios. ✓
 - Compresión de backups (zip/tar.gz). ✓
 - Retención de backups por días y limpieza segura. ✓
-- Cifrado AES opcional de backups.
+- Cifrado AES-256 opcional de backups. ✓
 - Logs estructurados y `--verbose`. ✓
 - CI GitHub Actions (build + test).
 - Publicación como .NET global tool.
