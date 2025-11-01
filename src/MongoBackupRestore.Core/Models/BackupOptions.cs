@@ -64,4 +64,10 @@ public class BackupOptions
     /// Formato de compresión para el backup (None, Zip, TarGz)
     /// </summary>
     public CompressionFormat CompressionFormat { get; set; } = CompressionFormat.None;
+
+    /// <summary>
+    /// Número de días para retener backups. Si es null o 0, no se aplica retención.
+    /// Los backups más antiguos que este número de días serán eliminados automáticamente.
+    /// </summary>
+    public int? RetentionDays { get; set; }
 }
