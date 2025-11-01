@@ -12,6 +12,10 @@ jobs:
   build-and-test:
     name: Compilar y Probar
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
 
     steps:
       - name: Checkout código
