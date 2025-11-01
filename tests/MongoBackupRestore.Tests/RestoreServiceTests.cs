@@ -218,6 +218,117 @@ public class RestoreServiceTests : IDisposable
         result.ExitCode.Should().Be(1);
     }
 
+    [Fact]
+    public async Task ExecuteRestoreAsync_ConCredencialesInvalidas_ValidaYRetornaError()
+    {
+        // Arrange
+        var mockConnectionValidator = new Mock<Core.Interfaces.IMongoConnectionValidator>();
+        var restoreService = new RestoreService(
+            _mockProcessRunner.Object,
+            _mockToolsValidator.Object,
+            _mockLogger.Object,
+            mockConnectionValidator.Object);
+
+        var options = new RestoreOptions
+        {
+            Database = "testdb",
+            SourcePath = _testSourcePath,
+            Username = "admin",
+            Password = "wrongpassword",
+            AuthenticationDatabase = "admin"
+        };
+
+        var toolsInfo = new MongoToolsInfo
+        {
+            MongoRestoreAvailable = true
+        };
+
+        _mockToolsValidator
+            .Setup(x => x.ValidateToolsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(toolsInfo);
+
+        mockConnectionValidator
+            .Setup(x => x.ValidateConnectionAsync(
+                It.IsAny<string>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((false, "Error de autenticación: Las credenciales son incorrectas"));
+
+        // Act
+        var result = await restoreService.ExecuteRestoreAsync(options);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("autenticación");
+        result.ExitCode.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteRestoreAsync_ConCredencialesValidas_ProcedeConRestore()
+    {
+        // Arrange
+        var mockConnectionValidator = new Mock<Core.Interfaces.IMongoConnectionValidator>();
+        var restoreService = new RestoreService(
+            _mockProcessRunner.Object,
+            _mockToolsValidator.Object,
+            _mockLogger.Object,
+            mockConnectionValidator.Object);
+
+        var options = new RestoreOptions
+        {
+            Database = "testdb",
+            SourcePath = _testSourcePath,
+            Username = "admin",
+            Password = "correctpassword",
+            AuthenticationDatabase = "admin"
+        };
+
+        var toolsInfo = new MongoToolsInfo
+        {
+            MongoRestoreAvailable = true
+        };
+
+        _mockToolsValidator
+            .Setup(x => x.ValidateToolsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(toolsInfo);
+
+        mockConnectionValidator
+            .Setup(x => x.ValidateConnectionAsync(
+                It.IsAny<string>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((true, null));
+
+        _mockProcessRunner
+            .Setup(x => x.RunProcessAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((0, "restore completed", ""));
+
+        // Act
+        var result = await restoreService.ExecuteRestoreAsync(options);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        mockConnectionValidator.Verify(x => x.ValidateConnectionAsync(
+            It.IsAny<string>(),
+            It.IsAny<int>(),
+            It.IsAny<string?>(),
+            It.IsAny<string?>(),
+            It.IsAny<string>(),
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     public void Dispose()
     {
         // Limpiar directorio temporal

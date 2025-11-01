@@ -18,11 +18,14 @@ var processRunner = new ProcessRunner(processRunnerLogger);
 var validatorLogger = loggerFactory.CreateLogger<MongoToolsValidator>();
 var toolsValidator = new MongoToolsValidator(processRunner, validatorLogger);
 
+var connectionValidatorLogger = loggerFactory.CreateLogger<MongoConnectionValidator>();
+var connectionValidator = new MongoConnectionValidator(processRunner, connectionValidatorLogger);
+
 var backupServiceLogger = loggerFactory.CreateLogger<BackupService>();
-var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger);
+var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger, connectionValidator);
 
 var restoreServiceLogger = loggerFactory.CreateLogger<RestoreService>();
-var restoreService = new RestoreService(processRunner, toolsValidator, restoreServiceLogger);
+var restoreService = new RestoreService(processRunner, toolsValidator, restoreServiceLogger, connectionValidator);
 
 // Crear comando raíz
 var rootCommand = new RootCommand("MongoDB Backup & Restore CLI - Herramienta para gestionar copias de seguridad de MongoDB");

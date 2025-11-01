@@ -31,7 +31,9 @@ Biblioteca de clases que contiene la lógica de negocio:
 #### Interfaces (`Interfaces/`)
 - **IProcessRunner**: Ejecuta procesos externos
 - **IMongoToolsValidator**: Valida herramientas de MongoDB
+- **IMongoConnectionValidator**: Valida conexiones y credenciales de MongoDB
 - **IBackupService**: Servicio principal de backup
+- **IRestoreService**: Servicio principal de restore
 
 #### Servicios (`Services/`)
 - **ProcessRunner**: Ejecuta comandos del sistema operativo
@@ -44,14 +46,31 @@ Biblioteca de clases que contiene la lógica de negocio:
   - Extrae versiones usando expresiones regulares
   - Cross-platform (Windows/Linux)
 
+- **MongoConnectionValidator**: Valida conexiones y credenciales de MongoDB
+  - Valida credenciales antes de ejecutar operaciones
+  - Usa mongosh/mongo para verificar conexión
+  - Analiza errores de autenticación y conexión
+  - Proporciona mensajes de error claros y específicos
+
 - **BackupService**: Servicio principal de backup
   - Valida opciones de entrada
+  - Valida credenciales de autenticación (si se proporcionan)
   - Ejecuta backup local con mongodump
   - Ejecuta backup en Docker
     - Crea backup dentro del contenedor
     - Copia archivos al host
     - Limpia archivos temporales
-  - Manejo completo de errores
+  - Manejo completo de errores con mensajes específicos
+
+- **RestoreService**: Servicio principal de restore
+  - Valida opciones de entrada
+  - Valida credenciales de autenticación (si se proporcionan)
+  - Ejecuta restore local con mongorestore
+  - Ejecuta restore en Docker
+    - Copia backup al contenedor
+    - Ejecuta restore dentro del contenedor
+    - Limpia archivos temporales
+  - Manejo completo de errores con mensajes específicos
 
 ### MongoBackupRestore.Cli
 
@@ -76,7 +95,22 @@ Pruebas unitarias con xUnit, Moq y FluentAssertions:
 - **BackupServiceTests**: Pruebas de validación y lógica de backup
   - Validación de opciones requeridas
   - Validación de herramientas disponibles
+  - Validación de credenciales de autenticación ⭐ NUEVO
   - Escenarios de error
+
+- **RestoreServiceTests**: Pruebas de validación y lógica de restore
+  - Validación de opciones requeridas
+  - Validación de herramientas disponibles
+  - Validación de credenciales de autenticación ⭐ NUEVO
+  - Validación de caracteres peligrosos
+  - Escenarios de error
+
+- **MongoConnectionValidatorTests**: Pruebas de validación de conexión ⭐ NUEVO
+  - Validación de conexión exitosa
+  - Detección de errores de autenticación
+  - Detección de errores de conexión
+  - Detección de errores de timeout
+  - Manejo de mongosh/mongo no disponible
 
 - **MongoToolsValidatorTests**: Pruebas de detección de herramientas
   - Detección individual de herramientas
@@ -153,17 +187,53 @@ dotnet run --project src/MongoBackupRestore.Cli -- backup \
 
 1. **Validación de Opciones**
    - Base de datos es obligatoria
-   - Ruta de salida es obligatoria
+   - Ruta de salida es obligatoria (backup) / Ruta de origen es obligatoria (restore)
    - Nombre de contenedor obligatorio con `--in-docker`
+   - Validación de caracteres peligrosos en nombres de base de datos y contenedores
 
 2. **Validación de Herramientas**
    - mongodump requerido para backup local/remoto
-   - Docker requerido para backup en contenedor
+   - mongorestore requerido para restore local/remoto
+   - Docker requerido para backup/restore en contenedor
    - Mensajes de error amigables con enlaces de descarga
 
-3. **Validación de Versiones**
+3. **Validación de Credenciales de Autenticación** ⭐ NUEVO
+   - Validación de conexión antes de ejecutar backup/restore
+   - Uso de mongosh/mongo para verificar credenciales
+   - Detección temprana de errores de autenticación
+   - Mensajes de error específicos y claros:
+     - Errores de autenticación (credenciales incorrectas)
+     - Errores de conexión (servidor no disponible)
+     - Errores de timeout (tiempo de espera agotado)
+     - Errores de DNS (host no resuelve)
+
+4. **Validación de Versiones**
    - Detección y visualización de versiones instaladas
    - Información mostrada al usuario antes de ejecutar
+
+## Manejo de Errores de Autenticación
+
+La CLI ahora proporciona mensajes de error específicos y claros para problemas de autenticación:
+
+### Ejemplos de mensajes de error:
+
+**Error de autenticación:**
+```
+Error de autenticación: Las credenciales proporcionadas son incorrectas o el usuario no tiene permisos suficientes.
+Verifique el nombre de usuario (--user), contraseña (--password) y base de datos de autenticación (--auth-db).
+```
+
+**Error de conexión:**
+```
+Error de conexión: No se pudo conectar al servidor MongoDB.
+Verifique que el host (--host), puerto (--port) y servicio MongoDB estén disponibles.
+```
+
+**Error de timeout:**
+```
+Error de conexión: Tiempo de espera agotado al conectar con MongoDB.
+Verifique que el servidor esté accesible y que no haya problemas de red.
+```
 
 ## Códigos de Salida
 

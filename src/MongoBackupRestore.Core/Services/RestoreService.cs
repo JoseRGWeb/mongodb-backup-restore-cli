@@ -12,15 +12,18 @@ public class RestoreService : IRestoreService
 {
     private readonly IProcessRunner _processRunner;
     private readonly IMongoToolsValidator _toolsValidator;
+    private readonly IMongoConnectionValidator? _connectionValidator;
     private readonly ILogger<RestoreService> _logger;
 
     public RestoreService(
         IProcessRunner processRunner,
         IMongoToolsValidator toolsValidator,
-        ILogger<RestoreService> logger)
+        ILogger<RestoreService> logger,
+        IMongoConnectionValidator? connectionValidator = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
+        _connectionValidator = connectionValidator;
         _logger = logger;
     }
 
@@ -42,6 +45,29 @@ public class RestoreService : IRestoreService
         if (!toolsValidationResult.Success)
         {
             return toolsValidationResult;
+        }
+
+        // Validar credenciales si se proporcionan
+        if (_connectionValidator != null && HasAuthenticationCredentials(options))
+        {
+            var (success, errorMessage) = await _connectionValidator.ValidateConnectionAsync(
+                options.Host,
+                options.Port,
+                options.Username,
+                options.Password,
+                options.AuthenticationDatabase,
+                options.Uri,
+                cancellationToken);
+
+            if (!success)
+            {
+                return new RestoreResult
+                {
+                    Success = false,
+                    Message = errorMessage ?? "Error al validar las credenciales de autenticación",
+                    ExitCode = 1
+                };
+            }
         }
 
         // Validar que la ruta de origen existe
@@ -206,6 +232,11 @@ public class RestoreService : IRestoreService
         return new RestoreResult { Success = true };
     }
 
+    private bool HasAuthenticationCredentials(RestoreOptions options)
+    {
+        return !string.IsNullOrWhiteSpace(options.Username) || !string.IsNullOrWhiteSpace(options.Uri);
+    }
+
     private async Task<RestoreResult> ExecuteLocalRestoreAsync(RestoreOptions options, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Ejecutando restauración local...");
@@ -236,7 +267,7 @@ public class RestoreService : IRestoreService
         }
         else
         {
-            var message = $"Error al ejecutar mongorestore (código de salida: {exitCode})";
+            var message = AnalyzeRestoreError(error, output, exitCode);
             _logger.LogError(message);
             _logger.LogError("Error: {Error}", error);
 
@@ -458,5 +489,43 @@ public class RestoreService : IRestoreService
         args.Append($" {tempPath}");
 
         return args.ToString();
+    }
+
+    private string AnalyzeRestoreError(string error, string output, int exitCode)
+    {
+        var combinedError = $"{error} {output}".ToLower();
+
+        // Errores de autenticación
+        if (combinedError.Contains("authentication failed") ||
+            combinedError.Contains("auth failed") ||
+            combinedError.Contains("unauthorized") ||
+            combinedError.Contains("not authorized") ||
+            combinedError.Contains("login failed"))
+        {
+            return "Error de autenticación: Las credenciales proporcionadas son incorrectas o el usuario no tiene permisos suficientes. " +
+                   "Verifique el nombre de usuario (--user), contraseña (--password) y base de datos de autenticación (--auth-db).";
+        }
+
+        // Errores de conexión
+        if (combinedError.Contains("connection refused") ||
+            combinedError.Contains("connect failed") ||
+            combinedError.Contains("econnrefused") ||
+            combinedError.Contains("couldn't connect to server"))
+        {
+            return "Error de conexión: No se pudo conectar al servidor MongoDB. " +
+                   "Verifique que el host (--host), puerto (--port) y servicio MongoDB estén disponibles.";
+        }
+
+        // Error de permisos insuficientes
+        if (combinedError.Contains("not permitted") ||
+            combinedError.Contains("permission denied"))
+        {
+            return "Error de permisos: El usuario no tiene permisos suficientes para realizar la restauración. " +
+                   "Verifique que el usuario tenga los permisos necesarios en la base de datos.";
+        }
+
+        // Error genérico
+        return $"Error al ejecutar mongorestore (código de salida: {exitCode}). " +
+               "Use --verbose para ver más detalles del error.";
     }
 }

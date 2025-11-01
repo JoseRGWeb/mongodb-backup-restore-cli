@@ -12,15 +12,18 @@ public class BackupService : IBackupService
 {
     private readonly IProcessRunner _processRunner;
     private readonly IMongoToolsValidator _toolsValidator;
+    private readonly IMongoConnectionValidator? _connectionValidator;
     private readonly ILogger<BackupService> _logger;
 
     public BackupService(
         IProcessRunner processRunner,
         IMongoToolsValidator toolsValidator,
-        ILogger<BackupService> logger)
+        ILogger<BackupService> logger,
+        IMongoConnectionValidator? connectionValidator = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
+        _connectionValidator = connectionValidator;
         _logger = logger;
     }
 
@@ -42,6 +45,29 @@ public class BackupService : IBackupService
         if (!toolsValidationResult.Success)
         {
             return toolsValidationResult;
+        }
+
+        // Validar credenciales si se proporcionan
+        if (_connectionValidator != null && HasAuthenticationCredentials(options))
+        {
+            var (success, errorMessage) = await _connectionValidator.ValidateConnectionAsync(
+                options.Host,
+                options.Port,
+                options.Username,
+                options.Password,
+                options.AuthenticationDatabase,
+                options.Uri,
+                cancellationToken);
+
+            if (!success)
+            {
+                return new BackupResult
+                {
+                    Success = false,
+                    Message = errorMessage ?? "Error al validar las credenciales de autenticación",
+                    ExitCode = 1
+                };
+            }
         }
 
         // Crear directorio de salida si no existe
@@ -138,6 +164,11 @@ public class BackupService : IBackupService
         return new BackupResult { Success = true };
     }
 
+    private bool HasAuthenticationCredentials(BackupOptions options)
+    {
+        return !string.IsNullOrWhiteSpace(options.Username) || !string.IsNullOrWhiteSpace(options.Uri);
+    }
+
     private async Task<BackupResult> ExecuteLocalBackupAsync(BackupOptions options, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Ejecutando backup local...");
@@ -169,7 +200,7 @@ public class BackupService : IBackupService
         }
         else
         {
-            var message = $"Error al ejecutar mongodump (código de salida: {exitCode})";
+            var message = AnalyzeBackupError(error, output, exitCode);
             _logger.LogError(message);
             _logger.LogError("Error: {Error}", error);
 
@@ -378,5 +409,41 @@ public class BackupService : IBackupService
         }
 
         return args.ToString();
+    }
+
+    private string AnalyzeBackupError(string error, string output, int exitCode)
+    {
+        var combinedError = $"{error} {output}".ToLower();
+
+        // Errores de autenticación
+        if (combinedError.Contains("authentication failed") ||
+            combinedError.Contains("auth failed") ||
+            combinedError.Contains("unauthorized") ||
+            combinedError.Contains("not authorized") ||
+            combinedError.Contains("login failed"))
+        {
+            return "Error de autenticación: Las credenciales proporcionadas son incorrectas o el usuario no tiene permisos suficientes. " +
+                   "Verifique el nombre de usuario (--user), contraseña (--password) y base de datos de autenticación (--auth-db).";
+        }
+
+        // Errores de conexión
+        if (combinedError.Contains("connection refused") ||
+            combinedError.Contains("connect failed") ||
+            combinedError.Contains("econnrefused") ||
+            combinedError.Contains("couldn't connect to server"))
+        {
+            return "Error de conexión: No se pudo conectar al servidor MongoDB. " +
+                   "Verifique que el host (--host), puerto (--port) y servicio MongoDB estén disponibles.";
+        }
+
+        // Error de base de datos no encontrada
+        if (combinedError.Contains("database") && combinedError.Contains("not found"))
+        {
+            return "Error: La base de datos especificada no existe en el servidor MongoDB.";
+        }
+
+        // Error genérico
+        return $"Error al ejecutar mongodump (código de salida: {exitCode}). " +
+               "Use --verbose para ver más detalles del error.";
     }
 }
