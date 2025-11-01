@@ -27,6 +27,7 @@ TestResult*/
 # Paquetes / artefactos
 *.nupkg
 *.snupkg
+nupkg/
 packages/
 .nuget/packages/
 
