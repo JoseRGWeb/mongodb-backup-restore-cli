@@ -15,6 +15,7 @@ public class BackupService : IBackupService
     private readonly IMongoConnectionValidator? _connectionValidator;
     private readonly IDockerContainerDetector? _containerDetector;
     private readonly ICompressionService? _compressionService;
+    private readonly IRetentionService? _retentionService;
     private readonly ILogger<BackupService> _logger;
 
     public BackupService(
@@ -23,13 +24,15 @@ public class BackupService : IBackupService
         ILogger<BackupService> logger,
         IMongoConnectionValidator? connectionValidator = null,
         IDockerContainerDetector? containerDetector = null,
-        ICompressionService? compressionService = null)
+        ICompressionService? compressionService = null,
+        IRetentionService? retentionService = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
         _connectionValidator = connectionValidator;
         _containerDetector = containerDetector;
         _compressionService = compressionService;
+        _retentionService = retentionService;
         _logger = logger;
     }
 
@@ -113,14 +116,23 @@ public class BackupService : IBackupService
         }
 
         // Ejecutar backup según el modo
+        BackupResult backupResult;
         if (options.InDocker)
         {
-            return await ExecuteDockerBackupAsync(options, cancellationToken);
+            backupResult = await ExecuteDockerBackupAsync(options, cancellationToken);
         }
         else
         {
-            return await ExecuteLocalBackupAsync(options, cancellationToken);
+            backupResult = await ExecuteLocalBackupAsync(options, cancellationToken);
         }
+
+        // Ejecutar limpieza de backups antiguos si el backup fue exitoso y hay política de retención
+        if (backupResult.Success && options.RetentionDays.HasValue && options.RetentionDays.Value > 0)
+        {
+            await ExecuteRetentionCleanupAsync(options, cancellationToken);
+        }
+
+        return backupResult;
     }
 
     private BackupResult ValidateOptions(BackupOptions options)
@@ -626,6 +638,60 @@ public class BackupService : IBackupService
                 Message = $"Error al comprimir el backup: {ex.Message}",
                 ExitCode = 1
             };
+        }
+    }
+
+    private async Task ExecuteRetentionCleanupAsync(BackupOptions options, CancellationToken cancellationToken)
+    {
+        if (_retentionService == null)
+        {
+            _logger.LogWarning("Servicio de retención no disponible. Omitiendo limpieza de backups antiguos.");
+            return;
+        }
+
+        try
+        {
+            _logger.LogInformation("Ejecutando limpieza de backups antiguos con política de retención de {Days} días", 
+                options.RetentionDays);
+
+            // Determinar el directorio base para la limpieza
+            // Es el directorio padre del OutputPath actual
+            var backupDirectory = Path.GetDirectoryName(options.OutputPath) ?? options.OutputPath;
+            
+            var policy = new RetentionPolicy
+            {
+                RetentionDays = options.RetentionDays,
+                BackupDirectory = backupDirectory
+            };
+
+            var retentionResult = await _retentionService.CleanupOldBackupsAsync(policy, cancellationToken);
+
+            if (retentionResult.Success)
+            {
+                if (retentionResult.DeletedCount > 0)
+                {
+                    _logger.LogInformation("Limpieza completada: {Count} backup(s) eliminado(s)", 
+                        retentionResult.DeletedCount);
+                    
+                    Console.WriteLine();
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine($"📦 Limpieza de retención: {retentionResult.Message}");
+                    Console.ResetColor();
+                }
+                else
+                {
+                    _logger.LogInformation("No se encontraron backups antiguos para eliminar");
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Error en la limpieza de backups: {Message}", retentionResult.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado durante la limpieza de backups antiguos");
+            // No fallar el backup completo si la limpieza falla
         }
     }
 }
