@@ -143,10 +143,12 @@ public class BackupService : IBackupService
         _logger.LogInformation("Ejecutando backup local...");
 
         var arguments = BuildMongoDumpArguments(options);
-        _logger.LogDebug("Comando: mongodump {Arguments}", arguments);
+        var commandName = MongoToolsValidator.GetMongoCommandName("mongodump");
+        
+        _logger.LogDebug("Comando: {Command} {Arguments}", commandName, arguments);
 
         var (exitCode, output, error) = await _processRunner.RunProcessAsync(
-            "mongodump",
+            commandName,
             arguments,
             cancellationToken);
 
@@ -244,6 +246,12 @@ public class BackupService : IBackupService
     {
         _logger.LogInformation("Copiando backup desde el contenedor al host...");
 
+        // Validar que containerName no sea null (ya validado anteriormente)
+        if (string.IsNullOrWhiteSpace(options.ContainerName))
+        {
+            throw new InvalidOperationException("El nombre del contenedor no puede ser nulo en este punto");
+        }
+
         var copyArgs = $"cp {options.ContainerName}:{containerPath}/. {options.OutputPath}";
         var (exitCode, output, error) = await _processRunner.RunProcessAsync(
             "docker",
@@ -313,6 +321,11 @@ public class BackupService : IBackupService
 
                 if (!string.IsNullOrWhiteSpace(options.Password))
                 {
+                    // NOTA DE SEGURIDAD: La contraseña se pasa como argumento de línea de comandos,
+                    // lo cual puede ser visible en la lista de procesos. En un entorno de producción,
+                    // considere usar variables de entorno o archivos de configuración seguros.
+                    // Para uso con mongodump, también se puede usar --authenticationDatabase sin password
+                    // y mongodump pedirá la contraseña interactivamente.
                     args.Append($" --password \"{options.Password}\"");
                 }
 
@@ -346,6 +359,9 @@ public class BackupService : IBackupService
 
             if (!string.IsNullOrWhiteSpace(options.Password))
             {
+                // NOTA DE SEGURIDAD: La contraseña se pasa como argumento de línea de comandos,
+                // lo cual puede ser visible en la lista de procesos. En un entorno de producción,
+                // considere usar variables de entorno o archivos de configuración seguros.
                 args.Append($" --password \"{options.Password}\"");
             }
 

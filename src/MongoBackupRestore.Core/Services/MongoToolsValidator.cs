@@ -117,6 +117,14 @@ public class MongoToolsValidator : IMongoToolsValidator
             : baseCommand;
     }
 
+    /// <summary>
+    /// Obtiene el nombre del comando con la extensión apropiada según la plataforma
+    /// </summary>
+    public static string GetMongoCommandName(string baseCommand)
+    {
+        return GetCommandName(baseCommand);
+    }
+
     private static string ExtractVersion(string output)
     {
         // Buscar patrón de versión como "version v100.9.5" o "version: 100.9.5"
