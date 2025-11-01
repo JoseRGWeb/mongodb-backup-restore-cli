@@ -522,7 +522,47 @@ README.md
 
 Guía de contribución y Código de Conducta se añadirán en el roadmap.
 
-## Roadmap (issues a crear)
+## Documentación Completa
+
+### 📚 Guías de Uso
+- **[Ejemplos End-to-End](./EJEMPLOS_END_TO_END.md)** - Casos de uso completos en diferentes escenarios:
+  - Backup local en Windows
+  - Backup y restore en Docker
+  - Backup remoto con autenticación
+  - Backup con compresión y cifrado
+  - Backup automatizado con retención
+  - Migración entre ambientes
+  - Recuperación ante desastres
+  - Y más...
+
+- **[Variables de Entorno](./VARIABLES_ENTORNO.md)** - Guía completa de configuración:
+  - Variables de conexión (`MONGO_HOST`, `MONGO_PORT`, `MONGO_URI`)
+  - Variables de autenticación (`MONGO_USER`, `MONGO_PASSWORD`)
+  - Variables de compresión y seguridad (`MONGO_COMPRESSION`, `MONGO_ENCRYPTION_KEY`)
+  - Variables de logging (`MONGO_LOG_LEVEL`, `MONGO_LOG_FILE`)
+  - Ejemplos de configuración por ambiente
+
+- **[Integración CI/CD](./INTEGRACION_CI_CD.md)** - Integración con plataformas CI/CD:
+  - GitHub Actions (workflows completos)
+  - GitLab CI/CD (pipelines multi-ambiente)
+  - Azure DevOps (YAML pipelines)
+  - Jenkins (declarativo y script)
+  - CircleCI
+  - Mejores prácticas y notificaciones
+
+- **[Logs y Debugging](./LOGS_Y_DEBUGGING.md)** - Guía de logs y depuración:
+  - Sistema de logging estructurado
+  - Niveles de log (trace, debug, info, warning, error, critical)
+  - Análisis y filtrado de logs
+  - Debugging avanzado
+  - Errores comunes y soluciones
+
+### 🔧 Documentación Técnica
+- **[Guía de Instalación](./INSTALACION.md)** - Instalación detallada y solución de problemas
+- **[Modo Docker](./DOCKER_MODE.md)** - Uso avanzado con Docker y auto-detección
+- **[Seguridad](./SEGURIDAD.md)** - Mejores prácticas de seguridad
+
+## Roadmap
 - CLI: comandos `backup` y `restore` con opciones principales. ✓
 - Soporte de `--uri` y autenticación. ✓
 - Modo Docker local (`docker exec`) con detección de binarios. ✓
@@ -532,7 +572,7 @@ Guía de contribución y Código de Conducta se añadirán en el roadmap.
 - Logs estructurados y `--verbose`. ✓
 - CI/CD con GitHub Actions (build, test y releases). ✓
 - **Publicación como .NET global tool**. ✓
-- Documentación de ejemplos end-to-end.
+- **Documentación completa con ejemplos end-to-end**. ✓
 
 ## Licencia
 MIT. Ver [LICENSE](./LICENSE).
