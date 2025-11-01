@@ -144,4 +144,115 @@ public class BackupServiceTests
         result.Message.Should().Contain("Docker no está disponible");
         result.ExitCode.Should().Be(127);
     }
+
+    [Fact]
+    public async Task ExecuteBackupAsync_ConCredencialesInvalidas_ValidaYRetornaError()
+    {
+        // Arrange
+        var mockConnectionValidator = new Mock<Core.Interfaces.IMongoConnectionValidator>();
+        var backupService = new BackupService(
+            _mockProcessRunner.Object,
+            _mockToolsValidator.Object,
+            _mockLogger.Object,
+            mockConnectionValidator.Object);
+
+        var options = new BackupOptions
+        {
+            Database = "testdb",
+            OutputPath = "/tmp/backup",
+            Username = "admin",
+            Password = "wrongpassword",
+            AuthenticationDatabase = "admin"
+        };
+
+        var toolsInfo = new MongoToolsInfo
+        {
+            MongoDumpAvailable = true
+        };
+
+        _mockToolsValidator
+            .Setup(x => x.ValidateToolsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(toolsInfo);
+
+        mockConnectionValidator
+            .Setup(x => x.ValidateConnectionAsync(
+                It.IsAny<string>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((false, "Error de autenticación: Las credenciales son incorrectas"));
+
+        // Act
+        var result = await backupService.ExecuteBackupAsync(options);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("autenticación");
+        result.ExitCode.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteBackupAsync_ConCredencialesValidas_ProcedeConBackup()
+    {
+        // Arrange
+        var mockConnectionValidator = new Mock<Core.Interfaces.IMongoConnectionValidator>();
+        var backupService = new BackupService(
+            _mockProcessRunner.Object,
+            _mockToolsValidator.Object,
+            _mockLogger.Object,
+            mockConnectionValidator.Object);
+
+        var options = new BackupOptions
+        {
+            Database = "testdb",
+            OutputPath = "/tmp/backup",
+            Username = "admin",
+            Password = "correctpassword",
+            AuthenticationDatabase = "admin"
+        };
+
+        var toolsInfo = new MongoToolsInfo
+        {
+            MongoDumpAvailable = true
+        };
+
+        _mockToolsValidator
+            .Setup(x => x.ValidateToolsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(toolsInfo);
+
+        mockConnectionValidator
+            .Setup(x => x.ValidateConnectionAsync(
+                It.IsAny<string>(),
+                It.IsAny<int>(),
+                It.IsAny<string?>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((true, null));
+
+        _mockProcessRunner
+            .Setup(x => x.RunProcessAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((0, "backup completed", ""));
+
+        // Act
+        var result = await backupService.ExecuteBackupAsync(options);
+
+        // Assert
+        result.Success.Should().BeTrue();
+        mockConnectionValidator.Verify(x => x.ValidateConnectionAsync(
+            It.IsAny<string>(),
+            It.IsAny<int>(),
+            It.IsAny<string?>(),
+            It.IsAny<string?>(),
+            It.IsAny<string>(),
+            It.IsAny<string?>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
 }
