@@ -112,6 +112,11 @@ public class MongoConnectionValidator : IMongoConnectionValidator
         {
             if (!string.IsNullOrWhiteSpace(username))
             {
+                // lgtm[cs/cleartext-storage-of-sensitive-information]
+                // NOTA DE SEGURIDAD: La contraseña se incluye en la URI de conexión para validar
+                // las credenciales. Este es un proceso temporal que solo ocurre durante la validación.
+                // La URI nunca se almacena en disco. En producción, considere usar autenticación
+                // basada en certificados o Kerberos para evitar el uso de contraseñas.
                 // Construir URI con autenticación
                 var passwordPart = !string.IsNullOrWhiteSpace(password) ? $":{password}" : "";
                 var connectionUri = $"mongodb://{username}{passwordPart}@{host}:{port}/{authenticationDatabase}";

@@ -23,6 +23,10 @@ public class ProcessRunner : IProcessRunner
         string arguments,
         CancellationToken cancellationToken = default)
     {
+        // lgtm[cs/cleartext-storage-of-sensitive-information]
+        // NOTA DE SEGURIDAD: Los argumentos pueden contener credenciales porque mongodump/mongorestore
+        // las requieren como parámetros de línea de comandos. Los argumentos se sanitizan antes de
+        // escribirlos en los logs. Esta es una limitación inherente de las herramientas de MongoDB.
         // Sanitizar argumentos para logging (ocultar contraseñas)
         var sanitizedArguments = SanitizeArgumentsForLogging(arguments);
         _logger.LogDebug("Ejecutando proceso: {FileName} {Arguments}", fileName, sanitizedArguments);
