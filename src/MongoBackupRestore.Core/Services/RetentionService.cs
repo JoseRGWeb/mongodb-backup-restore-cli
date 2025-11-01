@@ -117,7 +117,7 @@ public class RetentionService : IRetentionService
             if (item is DirectoryInfo dirInfo)
             {
                 // Calcular tamaño del directorio
-                itemSize = await Task.Run(() => CalculateDirectorySize(dirInfo));
+                itemSize = await Task.Run(() => CalculateDirectorySize(dirInfo)).ConfigureAwait(false);
                 
                 _logger.LogInformation("Eliminando directorio de backup: {Path} (Tamaño: {Size}, Fecha: {Date})",
                     item.FullName, FormatBytes(itemSize), item.LastWriteTime);
