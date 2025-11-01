@@ -147,7 +147,7 @@ internal class SimpleFileLogger : ILogger
         }
 
         var message = formatter(state, exception);
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
         var logLevelString = GetLogLevelString(logLevel);
         var logLine = $"[{timestamp}] [{logLevelString}] {_categoryName}: {message}";
 
@@ -160,6 +160,8 @@ internal class SimpleFileLogger : ILogger
         {
             try
             {
+                // Nota: Se usa AppendAllText por simplicidad. Para escenarios de alto volumen,
+                // considere usar StreamWriter con buffering.
                 File.AppendAllText(_filePath, logLine + Environment.NewLine);
             }
             catch
