@@ -13,17 +13,20 @@ public class BackupService : IBackupService
     private readonly IProcessRunner _processRunner;
     private readonly IMongoToolsValidator _toolsValidator;
     private readonly IMongoConnectionValidator? _connectionValidator;
+    private readonly IDockerContainerDetector? _containerDetector;
     private readonly ILogger<BackupService> _logger;
 
     public BackupService(
         IProcessRunner processRunner,
         IMongoToolsValidator toolsValidator,
         ILogger<BackupService> logger,
-        IMongoConnectionValidator? connectionValidator = null)
+        IMongoConnectionValidator? connectionValidator = null,
+        IDockerContainerDetector? containerDetector = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
         _connectionValidator = connectionValidator;
+        _containerDetector = containerDetector;
         _logger = logger;
     }
 
@@ -31,6 +34,16 @@ public class BackupService : IBackupService
     public async Task<BackupResult> ExecuteBackupAsync(BackupOptions options, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Iniciando backup de la base de datos: {Database}", options.Database);
+
+        // Si está en modo Docker sin nombre de contenedor, intentar auto-detección
+        if (options.InDocker && string.IsNullOrWhiteSpace(options.ContainerName))
+        {
+            var detectResult = await AutoDetectContainerAsync(options, cancellationToken);
+            if (!detectResult.Success)
+            {
+                return detectResult;
+            }
+        }
 
         // Validar opciones
         var validationResult = ValidateOptions(options);
@@ -45,6 +58,16 @@ public class BackupService : IBackupService
         if (!toolsValidationResult.Success)
         {
             return toolsValidationResult;
+        }
+
+        // Validar contenedor Docker si está en modo Docker
+        if (options.InDocker && _containerDetector != null)
+        {
+            var containerValidationResult = await ValidateDockerContainerAsync(options, cancellationToken);
+            if (!containerValidationResult.Success)
+            {
+                return containerValidationResult;
+            }
         }
 
         // Validar credenciales si se proporcionan
@@ -119,15 +142,8 @@ public class BackupService : IBackupService
             };
         }
 
-        if (options.InDocker && string.IsNullOrWhiteSpace(options.ContainerName))
-        {
-            return new BackupResult
-            {
-                Success = false,
-                Message = "El nombre del contenedor es obligatorio cuando se usa --in-docker (--container-name)",
-                ExitCode = 1
-            };
-        }
+        // La validación del nombre del contenedor se ha movido a después de la auto-detección
+        // para permitir que se detecte automáticamente si no se proporciona
 
         return new BackupResult { Success = true };
     }
@@ -445,5 +461,90 @@ public class BackupService : IBackupService
         // Error genérico
         return $"Error al ejecutar mongodump (código de salida: {exitCode}). " +
                "Use --verbose para ver más detalles del error.";
+    }
+
+    private async Task<BackupResult> AutoDetectContainerAsync(BackupOptions options, CancellationToken cancellationToken)
+    {
+        if (_containerDetector == null)
+        {
+            return new BackupResult
+            {
+                Success = false,
+                Message = "No se puede auto-detectar contenedores: el detector de contenedores no está disponible",
+                ExitCode = 1
+            };
+        }
+
+        _logger.LogInformation("Auto-detectando contenedores Docker con MongoDB...");
+
+        var containers = await _containerDetector.DetectMongoContainersAsync(cancellationToken);
+
+        if (containers.Count == 0)
+        {
+            return new BackupResult
+            {
+                Success = false,
+                Message = "No se encontraron contenedores Docker con MongoDB en ejecución. " +
+                         "Especifique el nombre del contenedor con --container-name o inicie un contenedor MongoDB.",
+                ExitCode = 1
+            };
+        }
+
+        if (containers.Count > 1)
+        {
+            return new BackupResult
+            {
+                Success = false,
+                Message = $"Se encontraron múltiples contenedores con MongoDB: {string.Join(", ", containers)}. " +
+                         "Especifique cuál usar con --container-name.",
+                ExitCode = 1
+            };
+        }
+
+        // Usar el único contenedor encontrado
+        options.ContainerName = containers[0];
+        _logger.LogInformation("Contenedor detectado automáticamente: {ContainerName}", options.ContainerName);
+
+        return new BackupResult { Success = true };
+    }
+
+    private async Task<BackupResult> ValidateDockerContainerAsync(BackupOptions options, CancellationToken cancellationToken)
+    {
+        if (_containerDetector == null || string.IsNullOrWhiteSpace(options.ContainerName))
+        {
+            return new BackupResult { Success = true };
+        }
+
+        // Validar que el contenedor existe y está en ejecución
+        var (containerValid, containerError) = await _containerDetector.ValidateContainerAsync(
+            options.ContainerName, cancellationToken);
+
+        if (!containerValid)
+        {
+            return new BackupResult
+            {
+                Success = false,
+                Message = containerError ?? $"Error al validar el contenedor '{options.ContainerName}'",
+                ExitCode = 1
+            };
+        }
+
+        // Validar que mongodump existe en el contenedor
+        var (binariesValid, binariesError) = await _containerDetector.ValidateMongoBinariesInContainerAsync(
+            options.ContainerName, checkMongoDump: true, checkMongoRestore: false, cancellationToken);
+
+        if (!binariesValid)
+        {
+            return new BackupResult
+            {
+                Success = false,
+                Message = binariesError ?? $"mongodump no está disponible en el contenedor '{options.ContainerName}'. " +
+                         "Asegúrese de que el contenedor tenga MongoDB Database Tools instalado.",
+                ExitCode = 127
+            };
+        }
+
+        _logger.LogInformation("Contenedor Docker validado: {ContainerName}", options.ContainerName);
+        return new BackupResult { Success = true };
     }
 }
