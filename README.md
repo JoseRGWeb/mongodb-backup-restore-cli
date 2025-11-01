@@ -20,7 +20,7 @@ Este proyecto sigue buenas prácticas de repositorios, versionado semántico y c
 - Directorio de salida configurable.
 - **Políticas de retención y limpieza automática de backups** ✓
 - **Cifrado AES-256 de backups** ✓
-- Logs estructurados y niveles de verbosidad.
+- **Logs estructurados y niveles de verbosidad** ✓
 - Integración CI/CD con GitHub Actions [roadmap].
 - Distribución como .NET global tool [roadmap].
 
@@ -199,7 +199,51 @@ mongodb-br restore --db MyDatabase --from ./backups/backup.zip.encrypted \
 - `--encrypt` / `-e` **Habilitar cifrado AES-256** para proteger el backup (solo para `backup`).
 - `--encryption-key` / `-k` **Clave de cifrado** para cifrar o descifrar el backup (mínimo 16 caracteres). Se puede configurar con la variable de entorno `MONGO_ENCRYPTION_KEY`.
 - `--drop` Eliminar la base de datos antes de restaurar (solo para `restore`).
-- `--verbose` Aumenta la verbosidad de logs.
+- `--verbose` / `-v` Habilitar modo verbose (muestra logs de nivel DEBUG para depuración detallada).
+- `--log-file` Ruta del archivo donde guardar los logs. También se puede usar la variable de entorno `MONGO_LOG_FILE`.
+
+## Logging y Verbosidad
+
+La aplicación proporciona un sistema de logging estructurado con diferentes niveles de detalle:
+
+### Niveles de Log
+- **Information** (por defecto): Muestra información general de operaciones
+- **Debug**: Muestra información detallada para depuración (activado con `--verbose`)
+- **Warning**: Muestra advertencias que no impiden la operación
+- **Error**: Muestra errores que impiden completar la operación
+
+### Configuración de Logging
+
+**Modo Verbose (Debug)**:
+```bash
+# Usando la opción --verbose
+mongodb-br backup --db MyDatabase --out ./backups --verbose
+
+# Usando la variable de entorno MONGO_LOG_LEVEL
+export MONGO_LOG_LEVEL=debug
+mongodb-br backup --db MyDatabase --out ./backups
+```
+
+**Guardar logs en archivo**:
+```bash
+# Usando la opción --log-file
+mongodb-br backup --db MyDatabase --out ./backups --log-file /var/log/mongodb-backup.log
+
+# Usando la variable de entorno MONGO_LOG_FILE
+export MONGO_LOG_FILE=/var/log/mongodb-backup.log
+mongodb-br backup --db MyDatabase --out ./backups
+```
+
+**Combinar verbose y archivo de log**:
+```bash
+mongodb-br backup --db MyDatabase --out ./backups --verbose --log-file ./logs/backup.log
+```
+
+### Variables de Entorno para Logging
+- `MONGO_LOG_LEVEL`: Nivel de log (`trace`, `debug`, `info`, `warning`, `error`, `critical`)
+- `MONGO_LOG_FILE`: Ruta del archivo de log
+
+> **Nota**: La opción `--verbose` tiene prioridad sobre `MONGO_LOG_LEVEL`. Cuando se usa `--verbose`, el nivel se establece automáticamente en `debug`.
 
 ## Modo Docker
 
@@ -227,6 +271,8 @@ Esto asegura que las operaciones fallen rápidamente con mensajes claros si falt
 - `MONGO_COMPRESSION` - Formato de compresión para backups (none, zip, targz)
 - `MONGO_RETENTION_DAYS` - Número de días para retener backups (elimina automáticamente backups antiguos)
 - `MONGO_ENCRYPTION_KEY` - Clave de cifrado para cifrar/descifrar backups (mínimo 16 caracteres)
+- `MONGO_LOG_LEVEL` - Nivel de log (trace, debug, info, warning, error, critical)
+- `MONGO_LOG_FILE` - Ruta del archivo donde guardar los logs
 - `DOCKER_CONTEXT` (para escenarios de Docker remoto en roadmap)
 - `MONGOBR_OUT_DIR` (directorio por defecto de backups)
 
