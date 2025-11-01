@@ -35,13 +35,12 @@ jobs:
             --logger "trx;LogFileName=test-results.trx"
 
       - name: Publicar resultados de pruebas
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: dorny/test-reporter@v1
         if: always()
         with:
-          files: |
-            **/test-results.trx
-          check_name: Resultados de Pruebas
-          comment_title: Resultados de Pruebas
+          name: Resultados de Pruebas
+          path: '**/test-results.trx'
+          reporter: dotnet-trx
 
       - name: Subir artefactos de build
         if: success()
