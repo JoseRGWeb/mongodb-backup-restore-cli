@@ -88,7 +88,7 @@ public class RestoreServiceTests : IDisposable
 
         // Assert
         result.Success.Should().BeFalse();
-        result.Message.Should().Contain("nombre del contenedor es obligatorio");
+        result.Message.Should().Contain("auto-detectar contenedores");
         result.ExitCode.Should().Be(1);
     }
 

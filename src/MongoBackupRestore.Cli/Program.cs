@@ -21,11 +21,14 @@ var toolsValidator = new MongoToolsValidator(processRunner, validatorLogger);
 var connectionValidatorLogger = loggerFactory.CreateLogger<MongoConnectionValidator>();
 var connectionValidator = new MongoConnectionValidator(processRunner, connectionValidatorLogger);
 
+var containerDetectorLogger = loggerFactory.CreateLogger<DockerContainerDetector>();
+var containerDetector = new DockerContainerDetector(processRunner, containerDetectorLogger);
+
 var backupServiceLogger = loggerFactory.CreateLogger<BackupService>();
-var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger, connectionValidator);
+var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger, connectionValidator, containerDetector);
 
 var restoreServiceLogger = loggerFactory.CreateLogger<RestoreService>();
-var restoreService = new RestoreService(processRunner, toolsValidator, restoreServiceLogger, connectionValidator);
+var restoreService = new RestoreService(processRunner, toolsValidator, restoreServiceLogger, connectionValidator, containerDetector);
 
 // Crear comando raíz
 var rootCommand = new RootCommand("MongoDB Backup & Restore CLI - Herramienta para gestionar copias de seguridad de MongoDB");
@@ -108,7 +111,7 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
 
     var containerNameOption = new Option<string?>(
         name: "--container-name",
-        description: "Nombre del contenedor Docker");
+        description: "Nombre del contenedor Docker (si no se especifica, se intentará detectar automáticamente)");
     containerNameOption.AddAlias("-c");
 
     // Opciones de verbosidad
@@ -285,7 +288,7 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
 
     var containerNameOption = new Option<string?>(
         name: "--container-name",
-        description: "Nombre del contenedor Docker");
+        description: "Nombre del contenedor Docker (si no se especifica, se intentará detectar automáticamente)");
     containerNameOption.AddAlias("-c");
 
     // Opciones adicionales de restore

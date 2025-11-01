@@ -12,7 +12,9 @@ Este proyecto sigue buenas prácticas de repositorios, versionado semántico y c
 - Modos de origen/destino:
   - Local (mongodump/mongorestore contra localhost).
   - Docker local (docker exec en el contenedor de MongoDB).
+  - **Detección automática de contenedores Docker con MongoDB** ✓
   - Remoto (conexión por host:puerto o, en roadmap, Docker remoto).
+- **Validación automática de binarios MongoDB dentro de contenedores** ✓
 - Soporte de autenticación (usuario/contraseña y authSource).
 - Directorio de salida configurable y compresión del backup (ZIP/TAR.GZ) [roadmap].
 - Políticas de retención [roadmap].
@@ -56,6 +58,12 @@ mongodb-br backup --db MyDatabase --host localhost --port 27017 --out ./backups/
 mongodb-br backup --db MyDatabase --in-docker --container-name mongo --out ./backups/2025-11-01
 ```
 
+- Docker local con auto-detección (detecta automáticamente el contenedor MongoDB):
+```bash
+mongodb-br backup --db MyDatabase --in-docker --out ./backups/2025-11-01
+```
+> **Nota**: Si existe un único contenedor con MongoDB en ejecución, se detectará automáticamente. Si hay múltiples contenedores, debe especificar `--container-name`.
+
 - Host remoto (MongoDB expuesto por red):
 ```bash
 mongodb-br backup --db MyDatabase --host mongo.example.com --port 27017 \
@@ -74,6 +82,12 @@ mongodb-br restore --db MyDatabase --host localhost --port 27017 --from ./backup
 mongodb-br restore --db MyDatabase --in-docker --container-name mongo --from ./backups/2025-11-01
 ```
 
+- Restaurar a contenedor Docker con auto-detección:
+```bash
+mongodb-br restore --db MyDatabase --in-docker --from ./backups/2025-11-01
+```
+> **Nota**: Si existe un único contenedor con MongoDB en ejecución, se detectará automáticamente.
+
 - Restaurar a host remoto:
 ```bash
 mongodb-br restore --db MyDatabase --host mongo.example.com --port 27017 \
@@ -89,13 +103,32 @@ mongodb-br restore --db MyDatabase --host mongo.example.com --port 27017 \
 - `--auth-db` Base de autenticación (p. ej., `admin`).
 - `--uri` Cadena de conexión completa (alternativa a host/port/user/password).
 - `--in-docker` Indica que el origen/destino es un contenedor local.
-- `--container-name` Nombre del contenedor (con `--in-docker`).
+- `--container-name` Nombre del contenedor (con `--in-docker`). Si no se especifica, se intentará detectar automáticamente.
 - `--out` Ruta de salida del backup (para `backup`).
 - `--from` Ruta de origen del backup (para `restore`).
 - `--compress` zip|tar.gz [roadmap].
 - `--encrypt` Habilitar cifrado [roadmap].
 - `--retention-days` Días a conservar [roadmap].
 - `--verbose` Aumenta la verbosidad de logs.
+
+## Modo Docker
+
+### Detección Automática de Contenedores
+Cuando se usa `--in-docker` sin especificar `--container-name`, la herramienta intentará detectar automáticamente contenedores Docker que ejecutan MongoDB:
+
+1. Busca contenedores basados en la imagen oficial de MongoDB
+2. Busca contenedores con el puerto 27017 expuesto
+3. Valida que los binarios `mongodump`/`mongorestore` estén disponibles en el contenedor
+
+Si se encuentra **un único contenedor**, se usa automáticamente. Si hay **múltiples contenedores** o **ninguno**, se muestra un error indicando que debe especificar `--container-name`.
+
+### Validación de Binarios
+La herramienta valida automáticamente que:
+- El contenedor Docker existe y está en ejecución
+- Los binarios necesarios (`mongodump` para backup, `mongorestore` para restore) están disponibles dentro del contenedor
+- El contenedor tiene acceso a MongoDB
+
+Esto asegura que las operaciones fallen rápidamente con mensajes claros si faltan dependencias.
 
 ### Variables de entorno soportadas
 - `MONGO_URI`
