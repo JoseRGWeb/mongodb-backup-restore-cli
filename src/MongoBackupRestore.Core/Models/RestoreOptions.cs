@@ -69,4 +69,9 @@ public class RestoreOptions
     /// Formato de compresión del backup a restaurar (se auto-detecta si no se especifica)
     /// </summary>
     public CompressionFormat CompressionFormat { get; set; } = CompressionFormat.None;
+
+    /// <summary>
+    /// Clave de cifrado para descifrar el backup (si está cifrado)
+    /// </summary>
+    public string? EncryptionKey { get; set; }
 }

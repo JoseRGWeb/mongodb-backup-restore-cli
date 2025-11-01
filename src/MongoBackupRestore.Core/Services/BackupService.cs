@@ -16,6 +16,7 @@ public class BackupService : IBackupService
     private readonly IDockerContainerDetector? _containerDetector;
     private readonly ICompressionService? _compressionService;
     private readonly IBackupRetentionService? _retentionService;
+    private readonly IEncryptionService? _encryptionService;
     private readonly ILogger<BackupService> _logger;
 
     public BackupService(
@@ -25,7 +26,8 @@ public class BackupService : IBackupService
         IMongoConnectionValidator? connectionValidator = null,
         IDockerContainerDetector? containerDetector = null,
         ICompressionService? compressionService = null,
-        IBackupRetentionService? retentionService = null)
+        IBackupRetentionService? retentionService = null,
+        IEncryptionService? encryptionService = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
@@ -33,6 +35,7 @@ public class BackupService : IBackupService
         _containerDetector = containerDetector;
         _compressionService = compressionService;
         _retentionService = retentionService;
+        _encryptionService = encryptionService;
         _logger = logger;
     }
 
@@ -223,6 +226,26 @@ public class BackupService : IBackupService
                 message = $"Backup completado y comprimido exitosamente para la base de datos '{options.Database}'";
             }
 
+            // Cifrar el backup si se especificó cifrado
+            if (options.Encrypt && !string.IsNullOrWhiteSpace(options.EncryptionKey))
+            {
+                var encryptionResult = await EncryptBackupAsync(backupPath, options, cancellationToken);
+                if (!encryptionResult.Success)
+                {
+                    return encryptionResult;
+                }
+                backupPath = encryptionResult.BackupPath!;
+                
+                if (options.CompressionFormat != CompressionFormat.None)
+                {
+                    message = $"Backup completado, comprimido y cifrado exitosamente para la base de datos '{options.Database}'";
+                }
+                else
+                {
+                    message = $"Backup completado y cifrado exitosamente para la base de datos '{options.Database}'";
+                }
+            }
+
             // Aplicar política de retención si está configurada
             if (options.RetentionDays.HasValue && options.RetentionDays.Value > 0)
             {
@@ -311,6 +334,26 @@ public class BackupService : IBackupService
             }
             backupPath = compressionResult.BackupPath!;
             successMessage = $"Backup completado y comprimido exitosamente para la base de datos '{options.Database}' desde el contenedor '{options.ContainerName}'";
+        }
+
+        // Cifrar el backup si se especificó cifrado
+        if (options.Encrypt && !string.IsNullOrWhiteSpace(options.EncryptionKey))
+        {
+            var encryptionResult = await EncryptBackupAsync(backupPath, options, cancellationToken);
+            if (!encryptionResult.Success)
+            {
+                return encryptionResult;
+            }
+            backupPath = encryptionResult.BackupPath!;
+            
+            if (options.CompressionFormat != CompressionFormat.None)
+            {
+                successMessage = $"Backup completado, comprimido y cifrado exitosamente para la base de datos '{options.Database}' desde el contenedor '{options.ContainerName}'";
+            }
+            else
+            {
+                successMessage = $"Backup completado y cifrado exitosamente para la base de datos '{options.Database}' desde el contenedor '{options.ContainerName}'";
+            }
         }
 
         // Aplicar política de retención si está configurada
@@ -693,6 +736,130 @@ public class BackupService : IBackupService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error al aplicar política de retención");
+        }
+    }
+
+    /// <summary>
+    /// Cifra el backup usando AES-256
+    /// </summary>
+    private async Task<BackupResult> EncryptBackupAsync(string backupPath, BackupOptions options, CancellationToken cancellationToken)
+    {
+        if (_encryptionService == null)
+        {
+            return new BackupResult
+            {
+                Success = false,
+                Message = "El servicio de cifrado no está disponible. No se puede cifrar el backup.",
+                ExitCode = 1
+            };
+        }
+
+        // Validar la clave de cifrado
+        var (isValid, errorMessage) = _encryptionService.ValidateEncryptionKey(options.EncryptionKey);
+        if (!isValid)
+        {
+            return new BackupResult
+            {
+                Success = false,
+                Message = $"Clave de cifrado inválida: {errorMessage}",
+                ExitCode = 1
+            };
+        }
+
+        try
+        {
+            _logger.LogInformation("Iniciando cifrado del backup...");
+
+            string sourceFile;
+            string destinationFile;
+
+            // Determinar si el backup es un directorio o un archivo
+            if (Directory.Exists(backupPath))
+            {
+                // Si es un directorio, primero comprimir en un archivo temporal ZIP
+                _logger.LogInformation("El backup es un directorio. Comprimiendo antes de cifrar...");
+                
+                var tempZipFile = Path.Combine(
+                    Path.GetDirectoryName(backupPath) ?? ".",
+                    $"{Path.GetFileName(backupPath)}_{DateTime.Now:yyyyMMdd_HHmmss}_temp");
+
+                if (_compressionService == null)
+                {
+                    return new BackupResult
+                    {
+                        Success = false,
+                        Message = "No se puede cifrar un directorio sin el servicio de compresión. Use --compress para comprimir el backup antes de cifrarlo.",
+                        ExitCode = 1
+                    };
+                }
+
+                sourceFile = await _compressionService.CompressAsync(
+                    backupPath,
+                    tempZipFile,
+                    CompressionFormat.Zip,
+                    message => _logger.LogInformation(message),
+                    cancellationToken);
+
+                destinationFile = sourceFile;
+
+                // Eliminar directorio original después de comprimir
+                if (Directory.Exists(backupPath))
+                {
+                    Directory.Delete(backupPath, recursive: true);
+                }
+            }
+            else if (File.Exists(backupPath))
+            {
+                // Si es un archivo, usar directamente
+                sourceFile = backupPath;
+                destinationFile = Path.Combine(
+                    Path.GetDirectoryName(backupPath) ?? ".",
+                    Path.GetFileNameWithoutExtension(backupPath));
+            }
+            else
+            {
+                return new BackupResult
+                {
+                    Success = false,
+                    Message = $"La ruta del backup no es válida: {backupPath}",
+                    ExitCode = 1
+                };
+            }
+
+            var encryptedFilePath = await _encryptionService.EncryptFileAsync(
+                sourceFile,
+                destinationFile,
+                options.EncryptionKey!,
+                message => _logger.LogInformation(message),
+                cancellationToken);
+
+            // Eliminar el archivo sin cifrar después del cifrado exitoso
+            if (File.Exists(sourceFile) && sourceFile != backupPath)
+            {
+                _logger.LogDebug("Eliminando archivo temporal sin cifrar: {SourceFile}", sourceFile);
+                File.Delete(sourceFile);
+            }
+            else if (File.Exists(backupPath))
+            {
+                _logger.LogDebug("Eliminando archivo sin cifrar: {BackupPath}", backupPath);
+                File.Delete(backupPath);
+            }
+
+            return new BackupResult
+            {
+                Success = true,
+                BackupPath = encryptedFilePath
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al cifrar el backup");
+            return new BackupResult
+            {
+                Success = false,
+                Message = $"Error al cifrar el backup: {ex.Message}",
+                ExitCode = 1
+            };
         }
     }
 }

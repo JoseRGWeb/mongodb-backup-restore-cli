@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using MongoBackupRestore.Core.Interfaces;
@@ -15,6 +16,7 @@ public class RestoreService : IRestoreService
     private readonly IMongoConnectionValidator? _connectionValidator;
     private readonly IDockerContainerDetector? _containerDetector;
     private readonly ICompressionService? _compressionService;
+    private readonly IEncryptionService? _encryptionService;
     private readonly ILogger<RestoreService> _logger;
 
     public RestoreService(
@@ -23,13 +25,15 @@ public class RestoreService : IRestoreService
         ILogger<RestoreService> logger,
         IMongoConnectionValidator? connectionValidator = null,
         IDockerContainerDetector? containerDetector = null,
-        ICompressionService? compressionService = null)
+        ICompressionService? compressionService = null,
+        IEncryptionService? encryptionService = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
         _connectionValidator = connectionValidator;
         _containerDetector = containerDetector;
         _compressionService = compressionService;
+        _encryptionService = encryptionService;
         _logger = logger;
     }
 
@@ -103,18 +107,33 @@ public class RestoreService : IRestoreService
             return pathValidationResult;
         }
 
+        // Descifrar el backup si está cifrado
+        string sourcePathToProcess = options.SourcePath;
+        string? tempDecryptedPath = null;
+        
+        if (_encryptionService != null && _encryptionService.IsEncrypted(options.SourcePath))
+        {
+            var decryptResult = await DecryptBackupAsync(options, cancellationToken);
+            if (!decryptResult.Success)
+            {
+                return decryptResult;
+            }
+            tempDecryptedPath = decryptResult.DecryptedPath;
+            sourcePathToProcess = tempDecryptedPath!;
+        }
+
         // Descomprimir el backup si está comprimido
-        string sourcePathToRestore = options.SourcePath;
+        string sourcePathToRestore = sourcePathToProcess;
         string? tempDecompressedPath = null;
         
         if (_compressionService != null)
         {
-            var detectedFormat = _compressionService.DetectFormat(options.SourcePath);
+            var detectedFormat = _compressionService.DetectFormat(sourcePathToProcess);
             
             // Si se detectó un formato comprimido o se especificó explícitamente
             if (detectedFormat != CompressionFormat.None || options.CompressionFormat != CompressionFormat.None)
             {
-                var decompressResult = await DecompressBackupAsync(options, cancellationToken);
+                var decompressResult = await DecompressBackupAsync(options, sourcePathToProcess, cancellationToken);
                 if (!decompressResult.Success)
                 {
                     return decompressResult;
@@ -152,6 +171,20 @@ public class RestoreService : IRestoreService
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Error al eliminar directorio temporal");
+                }
+            }
+
+            // Limpiar archivo temporal descifrado
+            if (tempDecryptedPath != null && File.Exists(tempDecryptedPath))
+            {
+                try
+                {
+                    _logger.LogDebug("Eliminando archivo temporal descifrado: {TempPath}", tempDecryptedPath);
+                    File.Delete(tempDecryptedPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error al eliminar archivo temporal descifrado");
                 }
             }
         }
@@ -677,7 +710,7 @@ public class RestoreService : IRestoreService
         return new RestoreResult { Success = true };
     }
 
-    private async Task<RestoreResult> DecompressBackupAsync(RestoreOptions options, CancellationToken cancellationToken)
+    private async Task<RestoreResult> DecompressBackupAsync(RestoreOptions options, string sourceFilePath, CancellationToken cancellationToken)
     {
         if (_compressionService == null)
         {
@@ -693,7 +726,7 @@ public class RestoreService : IRestoreService
         {
             var format = options.CompressionFormat != CompressionFormat.None 
                 ? options.CompressionFormat 
-                : _compressionService.DetectFormat(options.SourcePath);
+                : _compressionService.DetectFormat(sourceFilePath);
 
             if (format == CompressionFormat.None)
             {
@@ -701,7 +734,7 @@ public class RestoreService : IRestoreService
                 return new RestoreResult
                 {
                     Success = true,
-                    DecompressedPath = options.SourcePath
+                    DecompressedPath = sourceFilePath
                 };
             }
 
@@ -711,7 +744,7 @@ public class RestoreService : IRestoreService
             Directory.CreateDirectory(tempDirectory);
 
             var success = await _compressionService.DecompressAsync(
-                options.SourcePath,
+                sourceFilePath,
                 tempDirectory,
                 message => _logger.LogInformation(message),
                 cancellationToken);
@@ -739,6 +772,97 @@ public class RestoreService : IRestoreService
             {
                 Success = false,
                 Message = $"Error al descomprimir el backup: {ex.Message}",
+                ExitCode = 1
+            };
+        }
+    }
+
+    /// <summary>
+    /// Descifra el backup usando AES-256
+    /// </summary>
+    private async Task<RestoreResult> DecryptBackupAsync(RestoreOptions options, CancellationToken cancellationToken)
+    {
+        if (_encryptionService == null)
+        {
+            return new RestoreResult
+            {
+                Success = false,
+                Message = "El servicio de cifrado no está disponible. No se puede descifrar el backup.",
+                ExitCode = 1
+            };
+        }
+
+        // Validar que se proporcionó la clave de cifrado
+        if (string.IsNullOrWhiteSpace(options.EncryptionKey))
+        {
+            return new RestoreResult
+            {
+                Success = false,
+                Message = "El backup está cifrado pero no se proporcionó la clave de cifrado. Use --encryption-key o la variable de entorno MONGO_ENCRYPTION_KEY.",
+                ExitCode = 1
+            };
+        }
+
+        // Validar la clave de cifrado
+        var (isValid, errorMessage) = _encryptionService.ValidateEncryptionKey(options.EncryptionKey);
+        if (!isValid)
+        {
+            return new RestoreResult
+            {
+                Success = false,
+                Message = $"Clave de cifrado inválida: {errorMessage}",
+                ExitCode = 1
+            };
+        }
+
+        try
+        {
+            _logger.LogInformation("Descifrando backup...");
+
+            var tempDecryptedFile = Path.Combine(
+                Path.GetTempPath(), 
+                $"mongodb-restore-decrypted-{Guid.NewGuid()}{Path.GetExtension(options.SourcePath).Replace(".encrypted", "")}");
+
+            var success = await _encryptionService.DecryptFileAsync(
+                options.SourcePath,
+                tempDecryptedFile,
+                options.EncryptionKey!,
+                message => _logger.LogInformation(message),
+                cancellationToken);
+
+            if (!success)
+            {
+                return new RestoreResult
+                {
+                    Success = false,
+                    Message = "Error al descifrar el backup. Verifique que la clave de cifrado sea correcta.",
+                    ExitCode = 1
+                };
+            }
+
+            return new RestoreResult
+            {
+                Success = true,
+                DecryptedPath = tempDecryptedFile
+            };
+        }
+        catch (CryptographicException ex)
+        {
+            _logger.LogError(ex, "Error criptográfico al descifrar el backup");
+            return new RestoreResult
+            {
+                Success = false,
+                Message = "Error al descifrar el backup: la clave de cifrado es incorrecta o el archivo está corrupto.",
+                ExitCode = 1
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al descifrar el backup");
+            return new RestoreResult
+            {
+                Success = false,
+                Message = $"Error al descifrar el backup: {ex.Message}",
                 ExitCode = 1
             };
         }

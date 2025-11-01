@@ -70,4 +70,14 @@ public class BackupOptions
     /// Los backups más antiguos que este número de días serán eliminados automáticamente.
     /// </summary>
     public int? RetentionDays { get; set; }
+
+    /// <summary>
+    /// Indica si se debe cifrar el backup usando AES-256
+    /// </summary>
+    public bool Encrypt { get; set; }
+
+    /// <summary>
+    /// Clave de cifrado para AES-256 (mínimo 16 caracteres)
+    /// </summary>
+    public string? EncryptionKey { get; set; }
 }
