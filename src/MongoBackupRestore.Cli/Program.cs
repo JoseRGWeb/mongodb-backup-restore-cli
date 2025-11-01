@@ -24,11 +24,14 @@ var connectionValidator = new MongoConnectionValidator(processRunner, connection
 var containerDetectorLogger = loggerFactory.CreateLogger<DockerContainerDetector>();
 var containerDetector = new DockerContainerDetector(processRunner, containerDetectorLogger);
 
+var compressionServiceLogger = loggerFactory.CreateLogger<CompressionService>();
+var compressionService = new CompressionService(compressionServiceLogger, processRunner);
+
 var backupServiceLogger = loggerFactory.CreateLogger<BackupService>();
-var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger, connectionValidator, containerDetector);
+var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger, connectionValidator, containerDetector, compressionService);
 
 var restoreServiceLogger = loggerFactory.CreateLogger<RestoreService>();
-var restoreService = new RestoreService(processRunner, toolsValidator, restoreServiceLogger, connectionValidator, containerDetector);
+var restoreService = new RestoreService(processRunner, toolsValidator, restoreServiceLogger, connectionValidator, containerDetector, compressionService);
 
 // Crear comando raíz
 var rootCommand = new RootCommand("MongoDB Backup & Restore CLI - Herramienta para gestionar copias de seguridad de MongoDB");
@@ -121,6 +124,12 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
         getDefaultValue: () => false);
     verboseOption.AddAlias("-v");
 
+    // Opciones de compresión
+    var compressOption = new Option<string?>(
+        name: "--compress",
+        description: "Formato de compresión para el backup (none, zip, targz)",
+        getDefaultValue: () => Environment.GetEnvironmentVariable("MONGO_COMPRESSION") ?? "none");
+
     // Agregar opciones al comando
     command.AddOption(dbOption);
     command.AddOption(outOption);
@@ -133,6 +142,7 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
     command.AddOption(inDockerOption);
     command.AddOption(containerNameOption);
     command.AddOption(verboseOption);
+    command.AddOption(compressOption);
 
     // Handler del comando
     command.SetHandler(async (context) =>
@@ -148,11 +158,25 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
         var inDocker = context.ParseResult.GetValueForOption(inDockerOption);
         var containerName = context.ParseResult.GetValueForOption(containerNameOption);
         var verbose = context.ParseResult.GetValueForOption(verboseOption);
+        var compress = context.ParseResult.GetValueForOption(compressOption);
 
         // Configurar nivel de log según verbosidad
         if (verbose)
         {
             loggerFactory.CreateLogger("Root").LogInformation("Modo verbose activado");
+        }
+
+        // Parsear formato de compresión
+        var compressionFormat = CompressionFormat.None;
+        if (!string.IsNullOrWhiteSpace(compress))
+        {
+            compressionFormat = compress.ToLowerInvariant() switch
+            {
+                "zip" => CompressionFormat.Zip,
+                "targz" or "tar.gz" or "tgz" => CompressionFormat.TarGz,
+                "none" => CompressionFormat.None,
+                _ => CompressionFormat.None
+            };
         }
 
         var options = new BackupOptions
@@ -167,7 +191,8 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
             Uri = uri,
             InDocker = inDocker,
             ContainerName = containerName,
-            Verbose = verbose
+            Verbose = verbose,
+            CompressionFormat = compressionFormat
         };
 
         try
@@ -304,6 +329,12 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
         getDefaultValue: () => false);
     verboseOption.AddAlias("-v");
 
+    // Opciones de compresión (para auto-detección o especificar formato)
+    var compressOption = new Option<string?>(
+        name: "--compress",
+        description: "Formato de compresión del backup (none, zip, targz). Se auto-detecta si no se especifica.",
+        getDefaultValue: () => Environment.GetEnvironmentVariable("MONGO_COMPRESSION") ?? "none");
+
     // Agregar opciones al comando
     command.AddOption(dbOption);
     command.AddOption(fromOption);
@@ -317,6 +348,7 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
     command.AddOption(containerNameOption);
     command.AddOption(dropOption);
     command.AddOption(verboseOption);
+    command.AddOption(compressOption);
 
     // Handler del comando
     command.SetHandler(async (context) =>
@@ -333,11 +365,25 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
         var containerName = context.ParseResult.GetValueForOption(containerNameOption);
         var drop = context.ParseResult.GetValueForOption(dropOption);
         var verbose = context.ParseResult.GetValueForOption(verboseOption);
+        var compress = context.ParseResult.GetValueForOption(compressOption);
 
         // Configurar nivel de log según verbosidad
         if (verbose)
         {
             loggerFactory.CreateLogger("Root").LogInformation("Modo verbose activado");
+        }
+
+        // Parsear formato de compresión
+        var compressionFormat = CompressionFormat.None;
+        if (!string.IsNullOrWhiteSpace(compress))
+        {
+            compressionFormat = compress.ToLowerInvariant() switch
+            {
+                "zip" => CompressionFormat.Zip,
+                "targz" or "tar.gz" or "tgz" => CompressionFormat.TarGz,
+                "none" => CompressionFormat.None,
+                _ => CompressionFormat.None
+            };
         }
 
         var options = new RestoreOptions
@@ -353,7 +399,8 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
             InDocker = inDocker,
             ContainerName = containerName,
             Drop = drop,
-            Verbose = verbose
+            Verbose = verbose,
+            CompressionFormat = compressionFormat
         };
 
         try

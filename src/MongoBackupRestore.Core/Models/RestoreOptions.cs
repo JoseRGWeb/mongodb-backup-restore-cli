@@ -64,4 +64,9 @@ public class RestoreOptions
     /// Indica si se debe eliminar la base de datos antes de restaurar (--drop)
     /// </summary>
     public bool Drop { get; set; }
+
+    /// <summary>
+    /// Formato de compresión del backup a restaurar (se auto-detecta si no se especifica)
+    /// </summary>
+    public CompressionFormat CompressionFormat { get; set; } = CompressionFormat.None;
 }

@@ -29,4 +29,9 @@ public class RestoreResult
     /// Error estándar del proceso
     /// </summary>
     public string? Error { get; set; }
+
+    /// <summary>
+    /// Ruta del directorio descomprimido temporal (usado internamente)
+    /// </summary>
+    public string? DecompressedPath { get; set; }
 }
