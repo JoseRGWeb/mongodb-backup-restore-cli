@@ -33,7 +33,7 @@ public class MongoConnectionValidator : IMongoConnectionValidator
         _logger.LogDebug("Validando conexión a MongoDB...");
 
         // Construir comando mongosh o mongo para validar la conexión
-        var commandName = GetMongoShellCommandName();
+        var commandName = await GetMongoShellCommandNameAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(commandName))
         {
             _logger.LogWarning("No se encontró mongosh ni mongo para validar la conexión");
@@ -64,7 +64,7 @@ public class MongoConnectionValidator : IMongoConnectionValidator
         return (false, errorMessage);
     }
 
-    private string? GetMongoShellCommandName()
+    private async Task<string?> GetMongoShellCommandNameAsync(CancellationToken cancellationToken)
     {
         // Intentar mongosh primero (versión moderna)
         var commandNames = new[] { "mongosh", "mongo" };
@@ -74,10 +74,10 @@ public class MongoConnectionValidator : IMongoConnectionValidator
             var fullCommand = MongoToolsValidator.GetMongoCommandName(cmd);
             try
             {
-                var testResult = _processRunner.RunProcessAsync(
+                var testResult = await _processRunner.RunProcessAsync(
                     fullCommand,
                     "--version",
-                    CancellationToken.None).Result;
+                    cancellationToken).ConfigureAwait(false);
 
                 if (testResult.exitCode == 0)
                 {

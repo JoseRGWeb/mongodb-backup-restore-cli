@@ -31,9 +31,6 @@ Biblioteca de clases que contiene la lógica de negocio:
 #### Interfaces (`Interfaces/`)
 - **IProcessRunner**: Ejecuta procesos externos
 - **IMongoToolsValidator**: Valida herramientas de MongoDB
-#### Interfaces (`Interfaces/`)
-- **IProcessRunner**: Ejecuta procesos externos
-- **IMongoToolsValidator**: Valida herramientas de MongoDB
 - **IMongoConnectionValidator**: Valida conexiones y credenciales de MongoDB
 - **IBackupService**: Servicio principal de backup
 - **IRestoreService**: Servicio principal de restore
