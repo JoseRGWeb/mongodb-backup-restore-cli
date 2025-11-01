@@ -69,8 +69,8 @@ public class EncryptionService : IEncryptionService
             var hmacPosition = destinationStream.Position;
             await destinationStream.WriteAsync(new byte[HmacSizeBytes], 0, HmacSizeBytes, cancellationToken);
 
-            // Posición donde comienzan los datos cifrados
-            var encryptedDataStartPosition = destinationStream.Position;
+            // Usar MemoryStream para acumular datos cifrados y calcular HMAC
+            using var encryptedDataBuffer = new MemoryStream();
 
             // Cifrar datos
             using (var aes = Aes.Create())
@@ -82,7 +82,7 @@ public class EncryptionService : IEncryptionService
                 aes.Padding = PaddingMode.PKCS7;
 
                 using var encryptor = aes.CreateEncryptor();
-                using var cryptoStream = new CryptoStream(destinationStream, encryptor, CryptoStreamMode.Write, leaveOpen: true);
+                using var cryptoStream = new CryptoStream(encryptedDataBuffer, encryptor, CryptoStreamMode.Write, leaveOpen: true);
 
                 var buffer = new byte[BufferSize];
                 int bytesRead;
@@ -109,12 +109,17 @@ public class EncryptionService : IEncryptionService
             }
 
             // Calcular HMAC de los datos cifrados
-            destinationStream.Seek(encryptedDataStartPosition, SeekOrigin.Begin);
-            var hmac = await ComputeHmacAsync(destinationStream, hmacKey, cancellationToken);
+            encryptedDataBuffer.Seek(0, SeekOrigin.Begin);
+            var hmac = await ComputeHmacAsync(encryptedDataBuffer, hmacKey, cancellationToken);
 
             // Escribir HMAC en su posición reservada
             destinationStream.Seek(hmacPosition, SeekOrigin.Begin);
             await destinationStream.WriteAsync(hmac, 0, hmac.Length, cancellationToken);
+
+            // Escribir datos cifrados después del HMAC
+            destinationStream.Seek(0, SeekOrigin.End);
+            encryptedDataBuffer.Seek(0, SeekOrigin.Begin);
+            await encryptedDataBuffer.CopyToAsync(destinationStream, BufferSize, cancellationToken);
 
             // Limpiar claves de la memoria
             Array.Clear(aesKey, 0, aesKey.Length);
