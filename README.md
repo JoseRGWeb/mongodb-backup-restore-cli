@@ -26,7 +26,7 @@ Este proyecto sigue buenas prácticas de repositorios, versionado semántico y c
 - **Cifrado AES-256 de backups** ✓
 - **Logs estructurados y niveles de verbosidad** ✓
 - **Integración CI/CD con GitHub Actions** ✓
-- Distribución como .NET global tool [roadmap].
+- **Distribución como .NET global tool** ✓
 
 ## Requisitos
 - .NET SDK 8.0 o superior
@@ -36,17 +36,49 @@ Este proyecto sigue buenas prácticas de repositorios, versionado semántico y c
 - Acceso al host/puerto de MongoDB en escenarios remotos
 - (Opcional) GitHub CLI para automatizar tareas con el repo
 
-## Instalación (desde código fuente)
+## Instalación
+
+### Opción 1: Como Herramienta Global de .NET (Recomendado)
+
+La forma más sencilla de instalar y usar la CLI es como herramienta global de .NET:
+
+```bash
+# Instalar desde NuGet
+dotnet tool install --global MongoBackupRestore.Cli
+
+# Verificar la instalación
+mongodb-br --version
+mongodb-br --help
+```
+
+**Actualizar a una nueva versión:**
+```bash
+dotnet tool update --global MongoBackupRestore.Cli
+```
+
+**Desinstalar:**
+```bash
+dotnet tool uninstall --global MongoBackupRestore.Cli
+```
+
+### Opción 2: Desde Código Fuente
+
+Si prefieres compilar desde el código fuente:
+
 ```bash
 git clone https://github.com/JoseRGWeb/mongodb-backup-restore-cli.git
 cd mongodb-backup-restore-cli
 dotnet build
+dotnet run --project src/MongoBackupRestore.Cli/MongoBackupRestore.Cli.csproj -- [comando] [opciones]
 ```
 
-En el roadmap se publicará como herramienta global:
+**O empaquetar e instalar localmente:**
 ```bash
-# futuro
-dotnet tool install -g mongodb-br
+# Generar el paquete
+dotnet pack src/MongoBackupRestore.Cli/MongoBackupRestore.Cli.csproj --configuration Release --output ./nupkg
+
+# Instalar desde el paquete local
+dotnet tool install --global --add-source ./nupkg MongoBackupRestore.Cli
 ```
 
 ## Uso
@@ -499,7 +531,7 @@ Guía de contribución y Código de Conducta se añadirán en el roadmap.
 - Cifrado AES-256 opcional de backups. ✓
 - Logs estructurados y `--verbose`. ✓
 - CI/CD con GitHub Actions (build, test y releases). ✓
-- Publicación como .NET global tool.
+- **Publicación como .NET global tool**. ✓
 - Documentación de ejemplos end-to-end.
 
 ## Licencia
