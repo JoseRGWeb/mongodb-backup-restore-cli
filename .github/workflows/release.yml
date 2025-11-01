@@ -1,0 +1,120 @@
+---
+name: Release
+
+# Este workflow crea releases con artefactos compilados
+"on":
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build-release:
+    name: Compilar Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Obtener versión del tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Restaurar dependencias
+        run: dotnet restore
+
+      - name: Compilar solución
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Ejecutar pruebas
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
+      - name: Publicar para Linux x64
+        run: |
+          dotnet publish \
+            src/MongoBackupRestore.Cli/MongoBackupRestore.Cli.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:PublishTrimmed=true \
+            -o ./publish/linux-x64
+
+      - name: Publicar para Windows x64
+        run: |
+          dotnet publish \
+            src/MongoBackupRestore.Cli/MongoBackupRestore.Cli.csproj \
+            -c Release \
+            -r win-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:PublishTrimmed=true \
+            -o ./publish/win-x64
+
+      - name: Publicar para macOS x64
+        run: |
+          dotnet publish \
+            src/MongoBackupRestore.Cli/MongoBackupRestore.Cli.csproj \
+            -c Release \
+            -r osx-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:PublishTrimmed=true \
+            -o ./publish/osx-x64
+
+      - name: Publicar para macOS ARM64
+        run: |
+          dotnet publish \
+            src/MongoBackupRestore.Cli/MongoBackupRestore.Cli.csproj \
+            -c Release \
+            -r osx-arm64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:PublishTrimmed=true \
+            -o ./publish/osx-arm64
+
+      - name: Crear archivos comprimidos
+        run: |
+          cd publish/linux-x64 && \
+            tar -czf ../../MongoBackupRestore-linux-x64.tar.gz * && \
+            cd ../..
+          cd publish/win-x64 && \
+            zip -r ../../MongoBackupRestore-win-x64.zip * && \
+            cd ../..
+          cd publish/osx-x64 && \
+            tar -czf ../../MongoBackupRestore-osx-x64.tar.gz * && \
+            cd ../..
+          cd publish/osx-arm64 && \
+            tar -czf ../../MongoBackupRestore-osx-arm64.tar.gz * && \
+            cd ../..
+
+      - name: Subir artefactos de release
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            *.tar.gz
+            *.zip
+          retention-days: 90
+
+      - name: Adjuntar binarios al release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            MongoBackupRestore-linux-x64.tar.gz
+            MongoBackupRestore-win-x64.zip
+            MongoBackupRestore-osx-x64.tar.gz
+            MongoBackupRestore-osx-arm64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

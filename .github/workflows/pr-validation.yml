@@ -1,0 +1,68 @@
+---
+name: Validación de Pull Request
+
+# Este workflow valida cambios en PRs antes de permitir el merge
+"on":
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  validar-pr:
+    name: Validar PR
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restaurar dependencias
+        run: dotnet restore
+
+      - name: Verificar formato de código
+        run: |
+          dotnet format --verify-no-changes --verbosity diagnostic
+        # Nota: continue-on-error está activado intencionalmente
+        # para no bloquear PRs por issues de formato que pueden
+        # ser corregidos automáticamente
+        continue-on-error: true
+
+      - name: Compilar en modo Debug
+        run: dotnet build --no-restore --configuration Debug
+
+      - name: Compilar en modo Release
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Ejecutar todas las pruebas con cobertura
+        run: |
+          dotnet test --no-build --configuration Release \
+            --verbosity normal \
+            --collect:"XPlat Code Coverage"
+
+      - name: Generar reporte de cobertura
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: '**/coverage.cobertura.xml'
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+      - name: Verificar archivos modificados
+        run: |
+          echo "## Archivos modificados en este PR" \
+            >> $GITHUB_STEP_SUMMARY
+          git diff --name-only \
+            origin/${{ github.base_ref }}...HEAD \
+            >> $GITHUB_STEP_SUMMARY

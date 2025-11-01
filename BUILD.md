@@ -159,6 +159,17 @@ dotnet restore
 dotnet build
 ```
 
+## CI/CD con GitHub Actions
+
+Este proyecto utiliza GitHub Actions para integración y entrega continua. Ver detalles completos en [.github/workflows/README.md](.github/workflows/README.md).
+
+### Workflows disponibles:
+- **Build y Test**: Se ejecuta en cada push y PR para compilar y probar el código
+- **Validación de PR**: Valida cambios en PRs antes de permitir el merge
+- **Release**: Crea releases con binarios para múltiples plataformas
+
+Los workflows se ejecutan automáticamente y todos deben pasar antes de mergear un PR.
+
 ## Contribuir
 
 Antes de enviar cambios:
@@ -166,3 +177,5 @@ Antes de enviar cambios:
 2. Ejecutar `dotnet test` - todas las pruebas deben pasar
 3. Ejecutar `dotnet format` - aplicar formato de código
 4. Verificar que los cambios sigan las convenciones del proyecto
+
+Los workflows de CI/CD validarán automáticamente tus cambios cuando abras un PR.
