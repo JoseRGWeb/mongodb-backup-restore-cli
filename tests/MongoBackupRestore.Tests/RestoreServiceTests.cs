@@ -178,6 +178,46 @@ public class RestoreServiceTests : IDisposable
         result.ExitCode.Should().Be(127);
     }
 
+    [Fact]
+    public async Task ExecuteRestoreAsync_NombreBaseDeDatosConCaracteresPeligrosos_RetornaError()
+    {
+        // Arrange
+        var options = new RestoreOptions
+        {
+            Database = "test;db",
+            SourcePath = _testSourcePath
+        };
+
+        // Act
+        var result = await _restoreService.ExecuteRestoreAsync(options);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("caracteres no permitidos");
+        result.ExitCode.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteRestoreAsync_NombreContenedorConCaracteresPeligrosos_RetornaError()
+    {
+        // Arrange
+        var options = new RestoreOptions
+        {
+            Database = "testdb",
+            SourcePath = _testSourcePath,
+            InDocker = true,
+            ContainerName = "mongo;container"
+        };
+
+        // Act
+        var result = await _restoreService.ExecuteRestoreAsync(options);
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.Message.Should().Contain("caracteres no permitidos");
+        result.ExitCode.Should().Be(1);
+    }
+
     public void Dispose()
     {
         // Limpiar directorio temporal

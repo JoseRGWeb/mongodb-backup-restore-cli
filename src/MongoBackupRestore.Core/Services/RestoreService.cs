@@ -74,6 +74,19 @@ public class RestoreService : IRestoreService
             };
         }
 
+        // Validar que el nombre de la base de datos no contenga caracteres peligrosos
+        if (options.Database.Contains('"') || options.Database.Contains('\'') || 
+            options.Database.Contains(';') || options.Database.Contains('&') ||
+            options.Database.Contains('|') || options.Database.Contains('`'))
+        {
+            return new RestoreResult
+            {
+                Success = false,
+                Message = "El nombre de la base de datos contiene caracteres no permitidos",
+                ExitCode = 1
+            };
+        }
+
         if (string.IsNullOrWhiteSpace(options.SourcePath))
         {
             return new RestoreResult
@@ -92,6 +105,54 @@ public class RestoreService : IRestoreService
                 Message = "El nombre del contenedor es obligatorio cuando se usa --in-docker (--container-name)",
                 ExitCode = 1
             };
+        }
+
+        // Validar que el nombre del contenedor no contenga caracteres peligrosos
+        if (options.InDocker && !string.IsNullOrWhiteSpace(options.ContainerName))
+        {
+            if (options.ContainerName.Contains('"') || options.ContainerName.Contains('\'') || 
+                options.ContainerName.Contains(';') || options.ContainerName.Contains('&') ||
+                options.ContainerName.Contains('|') || options.ContainerName.Contains('`'))
+            {
+                return new RestoreResult
+                {
+                    Success = false,
+                    Message = "El nombre del contenedor contiene caracteres no permitidos",
+                    ExitCode = 1
+                };
+            }
+        }
+
+        // Validar que el username no contenga caracteres peligrosos
+        if (!string.IsNullOrWhiteSpace(options.Username))
+        {
+            if (options.Username.Contains('"') || options.Username.Contains('\'') || 
+                options.Username.Contains(';') || options.Username.Contains('&') ||
+                options.Username.Contains('|') || options.Username.Contains('`'))
+            {
+                return new RestoreResult
+                {
+                    Success = false,
+                    Message = "El nombre de usuario contiene caracteres no permitidos",
+                    ExitCode = 1
+                };
+            }
+        }
+
+        // Validar que el host no contenga caracteres peligrosos (excepto en URI)
+        if (string.IsNullOrWhiteSpace(options.Uri) && !string.IsNullOrWhiteSpace(options.Host))
+        {
+            if (options.Host.Contains('"') || options.Host.Contains('\'') || 
+                options.Host.Contains(';') || options.Host.Contains('&') ||
+                options.Host.Contains('|') || options.Host.Contains('`'))
+            {
+                return new RestoreResult
+                {
+                    Success = false,
+                    Message = "El host contiene caracteres no permitidos",
+                    ExitCode = 1
+                };
+            }
         }
 
         return new RestoreResult { Success = true };
