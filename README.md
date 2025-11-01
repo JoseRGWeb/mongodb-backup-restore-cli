@@ -1,5 +1,9 @@
 # MongoDB Backup & Restore CLI (.NET)
 
+[![Build y Test](https://github.com/JoseRGWeb/mongodb-backup-restore-cli/actions/workflows/build-test.yml/badge.svg)](https://github.com/JoseRGWeb/mongodb-backup-restore-cli/actions/workflows/build-test.yml)
+[![Validación de PR](https://github.com/JoseRGWeb/mongodb-backup-restore-cli/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/JoseRGWeb/mongodb-backup-restore-cli/actions/workflows/pr-validation.yml)
+[![Release](https://github.com/JoseRGWeb/mongodb-backup-restore-cli/actions/workflows/release.yml/badge.svg)](https://github.com/JoseRGWeb/mongodb-backup-restore-cli/actions/workflows/release.yml)
+
 CLI en .NET para realizar copias de seguridad (backup) y restauraciones (restore) de bases de datos MongoDB en:
 - Instancia local de MongoDB en Windows.
 - Contenedor Docker local (Windows).
@@ -21,7 +25,7 @@ Este proyecto sigue buenas prácticas de repositorios, versionado semántico y c
 - **Políticas de retención y limpieza automática de backups** ✓
 - **Cifrado AES-256 de backups** ✓
 - **Logs estructurados y niveles de verbosidad** ✓
-- Integración CI/CD con GitHub Actions [roadmap].
+- **Integración CI/CD con GitHub Actions** ✓
 - Distribución como .NET global tool [roadmap].
 
 ## Requisitos
@@ -469,7 +473,7 @@ README.md
 - Versionado: SemVer (MAJOR.MINOR.PATCH).
 - Commits: Conventional Commits (feat, fix, chore, docs, etc.).
 - Código: análisis estático y `dotnet format`.
-- CI (roadmap): Build, test y publicación de artefactos con GitHub Actions.
+- CI/CD: Build, test y publicación de artefactos con GitHub Actions ✓
 - Lanzamientos: changelog automatizado (roadmap).
 
 ## Seguridad
@@ -494,7 +498,7 @@ Guía de contribución y Código de Conducta se añadirán en el roadmap.
 - Retención de backups por días y limpieza segura. ✓
 - Cifrado AES-256 opcional de backups. ✓
 - Logs estructurados y `--verbose`. ✓
-- CI GitHub Actions (build + test).
+- CI/CD con GitHub Actions (build, test y releases). ✓
 - Publicación como .NET global tool.
 - Documentación de ejemplos end-to-end.
 
