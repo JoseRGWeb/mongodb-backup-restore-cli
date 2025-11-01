@@ -29,6 +29,9 @@ jobs:
       - name: Verificar formato de código
         run: |
           dotnet format --verify-no-changes --verbosity diagnostic
+        # Nota: continue-on-error está activado intencionalmente
+        # para no bloquear PRs por issues de formato que pueden
+        # ser corregidos automáticamente
         continue-on-error: true
 
       - name: Compilar en modo Debug
