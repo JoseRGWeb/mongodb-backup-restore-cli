@@ -514,13 +514,23 @@ README.md
 - Reporta vulnerabilidades abriendo un “Security Advisory” o contactando por el canal indicado.
 
 ## Cómo contribuir
-1. Crea un fork y rama desde `main`.
-2. Agrega o ajusta pruebas.
-3. Ejecuta `dotnet build` y `dotnet test`.
-4. Sigue Conventional Commits en tus mensajes.
-5. Abre un PR con una descripción clara del cambio.
 
-Guía de contribución y Código de Conducta se añadirán en el roadmap.
+¡Valoramos y agradecemos todas las contribuciones! Para contribuir al proyecto:
+
+1. Lee nuestra **[Guía de Contribución](CONTRIBUTING.md)** completa que incluye:
+   - Convenciones de Conventional Commits
+   - Proceso de Pull Request y revisión
+   - Estructura de ramas y releases
+   - Guías de estilo de código
+   - Testing y calidad
+2. Asegúrate de seguir nuestro **[Código de Conducta](CODE_OF_CONDUCT.md)**
+3. Crea un fork y rama desde `main`
+4. Agrega o ajusta pruebas para tus cambios
+5. Ejecuta `dotnet build` y `dotnet test`
+6. Sigue Conventional Commits en tus mensajes
+7. Abre un PR con una descripción clara del cambio
+
+Para más detalles, consulta [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Documentación Completa
 
@@ -561,6 +571,14 @@ Guía de contribución y Código de Conducta se añadirán en el roadmap.
 - **[Guía de Instalación](./INSTALACION.md)** - Instalación detallada y solución de problemas
 - **[Modo Docker](./DOCKER_MODE.md)** - Uso avanzado con Docker y auto-detección
 - **[Seguridad](./SEGURIDAD.md)** - Mejores prácticas de seguridad
+
+### 🤝 Contribución y Comunidad
+- **[Guía de Contribución](./CONTRIBUTING.md)** - Cómo contribuir al proyecto:
+  - Convenciones de Conventional Commits
+  - Proceso de Pull Request y revisión
+  - Estructura de ramas y releases
+  - Guías de estilo y testing
+- **[Código de Conducta](./CODE_OF_CONDUCT.md)** - Normas de comportamiento para la comunidad
 
 ## Roadmap
 - CLI: comandos `backup` y `restore` con opciones principales. ✓
