@@ -402,26 +402,30 @@ EOF
 
 ---
 
-## Variables de Configuración
+## Variables de Configuración (Futuras)
 
-### `DOCKER_CONTEXT`
+> **Nota**: Las siguientes variables están planificadas para futuras versiones y aún no están implementadas.
 
-**Descripción**: Contexto de Docker para operaciones remotas (roadmap - no implementado aún).
+### `DOCKER_CONTEXT` (Roadmap)
 
-**Ejemplo**:
+**Descripción**: Contexto de Docker para operaciones remotas.
+
+**Estado**: Planificado - No implementado
+
+**Ejemplo futuro**:
 ```bash
 export DOCKER_CONTEXT=remote-server
 ```
 
 ---
 
-### `MONGOBR_OUT_DIR`
+### `MONGOBR_OUT_DIR` (Roadmap)
 
 **Descripción**: Directorio por defecto para almacenar backups.
 
-**Valor por defecto**: No definido (debe especificarse con `--out`)
+**Estado**: Planificado - No implementado
 
-**Ejemplo**:
+**Ejemplo futuro**:
 ```bash
 # Linux/Mac
 export MONGOBR_OUT_DIR=/var/backups/mongodb
@@ -429,9 +433,11 @@ export MONGOBR_OUT_DIR=/var/backups/mongodb
 # Windows
 $env:MONGOBR_OUT_DIR="C:\Backups\MongoDB"
 
-# Con esta variable, ya no es necesario especificar --out
-mongodb-br backup --db MiBaseDatos
+# Con esta variable implementada, no sería necesario especificar --out
+# mongodb-br backup --db MiBaseDatos
 ```
+
+> **Por ahora**: Debe especificarse `--out` en cada comando.
 
 ---
 
