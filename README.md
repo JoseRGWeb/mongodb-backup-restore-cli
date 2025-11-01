@@ -19,7 +19,7 @@ Este proyecto sigue buenas prácticas de repositorios, versionado semántico y c
 - **Compresión de backups (ZIP/TAR.GZ)** ✓
 - Directorio de salida configurable.
 - **Políticas de retención y limpieza automática de backups** ✓
-- Cifrado de backups [roadmap].
+- **Cifrado AES-256 de backups** ✓
 - Logs estructurados y niveles de verbosidad.
 - Integración CI/CD con GitHub Actions [roadmap].
 - Distribución como .NET global tool [roadmap].
@@ -104,6 +104,30 @@ export MONGO_RETENTION_DAYS=14
 mongodb-br backup --db MyDatabase --out ./backups/2025-11-01
 ```
 
+- **Backup con cifrado AES-256**:
+```bash
+mongodb-br backup --db MyDatabase --out ./backups/2025-11-01 --encrypt --encryption-key "MiClaveSegura123456"
+```
+
+- **Backup con cifrado usando variable de entorno**:
+```bash
+export MONGO_ENCRYPTION_KEY="MiClaveSegura123456"
+mongodb-br backup --db MyDatabase --out ./backups/2025-11-01 --encrypt
+```
+
+- **Backup comprimido y cifrado**:
+```bash
+mongodb-br backup --db MyDatabase --out ./backups/2025-11-01 --compress zip --encrypt --encryption-key "MiClaveSegura123456"
+```
+> **Nota**: Se recomienda siempre combinar cifrado con compresión para reducir el tamaño antes de cifrar.
+
+- **Backup completo con todas las opciones**:
+```bash
+mongodb-br backup --db MyDatabase --out ./backups/2025-11-01 \
+  --compress zip --encrypt --encryption-key "MiClaveSegura123456" \
+  --retention-days 30 --verbose
+```
+
 ### Ejemplos de restore
 - Restaurar a MongoDB local:
 ```bash
@@ -139,6 +163,26 @@ mongodb-br restore --db MyDatabase --from ./backups/2025-11-01_20251101_120000.z
 mongodb-br restore --db MyDatabase --from ./backups/backup.tar.gz --compress targz
 ```
 
+- **Restaurar desde backup cifrado**:
+```bash
+mongodb-br restore --db MyDatabase --from ./backups/2025-11-01_20251101_120000.zip.encrypted \
+  --encryption-key "MiClaveSegura123456"
+```
+> **Nota**: El backup cifrado se detecta automáticamente por la extensión .encrypted
+
+- **Restaurar desde backup cifrado usando variable de entorno**:
+```bash
+export MONGO_ENCRYPTION_KEY="MiClaveSegura123456"
+mongodb-br restore --db MyDatabase --from ./backups/2025-11-01_20251101_120000.zip.encrypted
+```
+
+- **Restaurar desde backup comprimido y cifrado**:
+```bash
+mongodb-br restore --db MyDatabase --from ./backups/backup.zip.encrypted \
+  --encryption-key "MiClaveSegura123456"
+```
+> **Nota**: La herramienta descifrará automáticamente primero y luego descomprimirá el backup antes de restaurar.
+
 ### Opciones principales
 - `--db` Nombre de la base de datos (obligatorio).
 - `--host` Host de MongoDB (por defecto: `localhost`).
@@ -152,8 +196,9 @@ mongodb-br restore --db MyDatabase --from ./backups/backup.tar.gz --compress tar
 - `--from` Ruta de origen del backup (para `restore`).
 - `--compress` Formato de compresión: `none`, `zip`, `targz` (por defecto: `none`). También se puede configurar con la variable de entorno `MONGO_COMPRESSION`.
 - `--retention-days` / `-r` **Número de días para retener backups**. Los backups más antiguos que este período serán eliminados automáticamente después de crear un nuevo backup. Se puede configurar también con la variable de entorno `MONGO_RETENTION_DAYS`.
+- `--encrypt` / `-e` **Habilitar cifrado AES-256** para proteger el backup (solo para `backup`).
+- `--encryption-key` / `-k` **Clave de cifrado** para cifrar o descifrar el backup (mínimo 16 caracteres). Se puede configurar con la variable de entorno `MONGO_ENCRYPTION_KEY`.
 - `--drop` Eliminar la base de datos antes de restaurar (solo para `restore`).
-- `--encrypt` Habilitar cifrado [roadmap].
 - `--verbose` Aumenta la verbosidad de logs.
 
 ## Modo Docker
@@ -181,6 +226,7 @@ Esto asegura que las operaciones fallen rápidamente con mensajes claros si falt
 - `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_AUTH_DB`
 - `MONGO_COMPRESSION` - Formato de compresión para backups (none, zip, targz)
 - `MONGO_RETENTION_DAYS` - Número de días para retener backups (elimina automáticamente backups antiguos)
+- `MONGO_ENCRYPTION_KEY` - Clave de cifrado para cifrar/descifrar backups (mínimo 16 caracteres)
 - `DOCKER_CONTEXT` (para escenarios de Docker remoto en roadmap)
 - `MONGOBR_OUT_DIR` (directorio por defecto de backups)
 
