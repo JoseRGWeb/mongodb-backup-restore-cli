@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using MongoBackupRestore.Core.Interfaces;
 
@@ -47,10 +46,10 @@ public class DockerContainerDetector : IDockerContainerDetector
                 }
             }
 
-            // También buscar contenedores con puerto 27017 expuesto
+            // También buscar contenedores con puerto 27017 publicado
             var (exitCode2, output2, error2) = await _processRunner.RunProcessAsync(
                 "docker",
-                "ps --format \"{{.Names}}\" --filter \"expose=27017\"",
+                "ps --format \"{{.Names}}\" --filter \"publish=27017\"",
                 cancellationToken);
 
             if (exitCode2 == 0 && !string.IsNullOrWhiteSpace(output2))
@@ -61,12 +60,8 @@ public class DockerContainerDetector : IDockerContainerDetector
                     var containerName = line.Trim();
                     if (!string.IsNullOrWhiteSpace(containerName) && !containers.Contains(containerName))
                     {
-                        // Validar que realmente tenga MongoDB
-                        var (hasMongo, _) = await ValidateMongoBinariesInContainerAsync(
-                            containerName, 
-                            checkMongoDump: false, 
-                            checkMongoRestore: false,
-                            cancellationToken);
+                        // Validar que realmente tenga MongoDB usando una verificación más ligera
+                        var (hasMongo, _) = await CheckMongodInContainerAsync(containerName, cancellationToken);
                         
                         if (hasMongo)
                         {
@@ -226,6 +221,30 @@ public class DockerContainerDetector : IDockerContainerDetector
             _logger.LogError(ex, "Error al verificar binario {BinaryName} en contenedor {ContainerName}",
                 binaryName, containerName);
             return (false, $"Error al verificar el binario: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Verificación ligera de MongoDB en el contenedor (solo verifica mongod, no las herramientas)
+    /// Usado durante la detección automática para evitar overhead
+    /// </summary>
+    private async Task<(bool success, string? errorMessage)> CheckMongodInContainerAsync(
+        string containerName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Solo verificar que mongod existe (más ligero que validar todo)
+            var (exitCode, output, error) = await _processRunner.RunProcessAsync(
+                "docker",
+                $"exec {containerName} sh -c \"command -v mongod\"",
+                cancellationToken);
+
+            return (exitCode == 0 && !string.IsNullOrWhiteSpace(output), null);
+        }
+        catch
+        {
+            return (false, null);
         }
     }
 }
