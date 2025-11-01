@@ -27,8 +27,11 @@ var containerDetector = new DockerContainerDetector(processRunner, containerDete
 var compressionServiceLogger = loggerFactory.CreateLogger<CompressionService>();
 var compressionService = new CompressionService(compressionServiceLogger, processRunner);
 
+var retentionServiceLogger = loggerFactory.CreateLogger<BackupRetentionService>();
+var retentionService = new BackupRetentionService(retentionServiceLogger);
+
 var backupServiceLogger = loggerFactory.CreateLogger<BackupService>();
-var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger, connectionValidator, containerDetector, compressionService);
+var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger, connectionValidator, containerDetector, compressionService, retentionService);
 
 var restoreServiceLogger = loggerFactory.CreateLogger<RestoreService>();
 var restoreService = new RestoreService(processRunner, toolsValidator, restoreServiceLogger, connectionValidator, containerDetector, compressionService);
@@ -130,6 +133,17 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
         description: "Formato de compresión para el backup (none, zip, targz)",
         getDefaultValue: () => Environment.GetEnvironmentVariable("MONGO_COMPRESSION") ?? "none");
 
+    // Opciones de retención
+    var retentionDaysOption = new Option<int?>(
+        name: "--retention-days",
+        description: "Número de días para retener backups. Los backups más antiguos serán eliminados automáticamente.",
+        getDefaultValue: () =>
+        {
+            var retentionStr = Environment.GetEnvironmentVariable("MONGO_RETENTION_DAYS");
+            return int.TryParse(retentionStr, out var days) ? days : null;
+        });
+    retentionDaysOption.AddAlias("-r");
+
     // Agregar opciones al comando
     command.AddOption(dbOption);
     command.AddOption(outOption);
@@ -143,6 +157,7 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
     command.AddOption(containerNameOption);
     command.AddOption(verboseOption);
     command.AddOption(compressOption);
+    command.AddOption(retentionDaysOption);
 
     // Handler del comando
     command.SetHandler(async (context) =>
@@ -159,6 +174,7 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
         var containerName = context.ParseResult.GetValueForOption(containerNameOption);
         var verbose = context.ParseResult.GetValueForOption(verboseOption);
         var compress = context.ParseResult.GetValueForOption(compressOption);
+        var retentionDays = context.ParseResult.GetValueForOption(retentionDaysOption);
 
         // Configurar nivel de log según verbosidad
         if (verbose)
@@ -192,7 +208,8 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
             InDocker = inDocker,
             ContainerName = containerName,
             Verbose = verbose,
-            CompressionFormat = compressionFormat
+            CompressionFormat = compressionFormat,
+            RetentionDays = retentionDays
         };
 
         try

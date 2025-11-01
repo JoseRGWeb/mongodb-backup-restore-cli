@@ -15,6 +15,7 @@ public class BackupService : IBackupService
     private readonly IMongoConnectionValidator? _connectionValidator;
     private readonly IDockerContainerDetector? _containerDetector;
     private readonly ICompressionService? _compressionService;
+    private readonly IBackupRetentionService? _retentionService;
     private readonly ILogger<BackupService> _logger;
 
     public BackupService(
@@ -23,13 +24,15 @@ public class BackupService : IBackupService
         ILogger<BackupService> logger,
         IMongoConnectionValidator? connectionValidator = null,
         IDockerContainerDetector? containerDetector = null,
-        ICompressionService? compressionService = null)
+        ICompressionService? compressionService = null,
+        IBackupRetentionService? retentionService = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
         _connectionValidator = connectionValidator;
         _containerDetector = containerDetector;
         _compressionService = compressionService;
+        _retentionService = retentionService;
         _logger = logger;
     }
 
@@ -220,6 +223,12 @@ public class BackupService : IBackupService
                 message = $"Backup completado y comprimido exitosamente para la base de datos '{options.Database}'";
             }
 
+            // Aplicar política de retención si está configurada
+            if (options.RetentionDays.HasValue && options.RetentionDays.Value > 0)
+            {
+                await ApplyRetentionPolicyAsync(options, cancellationToken);
+            }
+
             return new BackupResult
             {
                 Success = true,
@@ -302,6 +311,12 @@ public class BackupService : IBackupService
             }
             backupPath = compressionResult.BackupPath!;
             successMessage = $"Backup completado y comprimido exitosamente para la base de datos '{options.Database}' desde el contenedor '{options.ContainerName}'";
+        }
+
+        // Aplicar política de retención si está configurada
+        if (options.RetentionDays.HasValue && options.RetentionDays.Value > 0)
+        {
+            await ApplyRetentionPolicyAsync(options, cancellationToken);
         }
 
         return new BackupResult
@@ -626,6 +641,58 @@ public class BackupService : IBackupService
                 Message = $"Error al comprimir el backup: {ex.Message}",
                 ExitCode = 1
             };
+        }
+    }
+
+    /// <summary>
+    /// Aplica la política de retención de backups eliminando backups antiguos
+    /// </summary>
+    private async Task ApplyRetentionPolicyAsync(BackupOptions options, CancellationToken cancellationToken)
+    {
+        if (_retentionService == null)
+        {
+            _logger.LogWarning("El servicio de retención no está disponible. No se aplicará la política de retención.");
+            return;
+        }
+
+        try
+        {
+            _logger.LogInformation("Aplicando política de retención de {Days} días...", options.RetentionDays!.Value);
+
+            // Obtener el directorio padre donde están todos los backups
+            var backupParentDir = Path.GetDirectoryName(options.OutputPath);
+            if (string.IsNullOrWhiteSpace(backupParentDir))
+            {
+                backupParentDir = ".";
+            }
+
+            var cleanupResult = await _retentionService.CleanupOldBackupsAsync(
+                backupParentDir,
+                options.RetentionDays.Value,
+                dryRun: false,
+                cancellationToken);
+
+            if (cleanupResult.Success)
+            {
+                _logger.LogInformation("Política de retención aplicada exitosamente: {Message}", cleanupResult.Message);
+            }
+            else
+            {
+                _logger.LogWarning("La política de retención no se pudo aplicar completamente: {Message}", cleanupResult.Message);
+            }
+
+            // Log de errores si los hay
+            if (cleanupResult.Errors.Count > 0)
+            {
+                foreach (var error in cleanupResult.Errors)
+                {
+                    _logger.LogWarning("Error en retención: {Error}", error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al aplicar política de retención");
         }
     }
 }
