@@ -4,56 +4,21 @@ using MongoBackupRestore.Core.Interfaces;
 using MongoBackupRestore.Core.Models;
 using MongoBackupRestore.Core.Services;
 
-// Configurar logging
-using var loggerFactory = LoggerFactory.Create(builder =>
-{
-    builder.AddConsole();
-    builder.SetMinimumLevel(LogLevel.Information);
-});
-
-// Crear servicios
-var processRunnerLogger = loggerFactory.CreateLogger<ProcessRunner>();
-var processRunner = new ProcessRunner(processRunnerLogger);
-
-var validatorLogger = loggerFactory.CreateLogger<MongoToolsValidator>();
-var toolsValidator = new MongoToolsValidator(processRunner, validatorLogger);
-
-var connectionValidatorLogger = loggerFactory.CreateLogger<MongoConnectionValidator>();
-var connectionValidator = new MongoConnectionValidator(processRunner, connectionValidatorLogger);
-
-var containerDetectorLogger = loggerFactory.CreateLogger<DockerContainerDetector>();
-var containerDetector = new DockerContainerDetector(processRunner, containerDetectorLogger);
-
-var compressionServiceLogger = loggerFactory.CreateLogger<CompressionService>();
-var compressionService = new CompressionService(compressionServiceLogger, processRunner);
-
-var encryptionServiceLogger = loggerFactory.CreateLogger<EncryptionService>();
-var encryptionService = new EncryptionService(encryptionServiceLogger);
-
-var retentionServiceLogger = loggerFactory.CreateLogger<BackupRetentionService>();
-var retentionService = new BackupRetentionService(retentionServiceLogger);
-
-var backupServiceLogger = loggerFactory.CreateLogger<BackupService>();
-var backupService = new BackupService(processRunner, toolsValidator, backupServiceLogger, connectionValidator, containerDetector, compressionService, retentionService, encryptionService);
-
-var restoreServiceLogger = loggerFactory.CreateLogger<RestoreService>();
-var restoreService = new RestoreService(processRunner, toolsValidator, restoreServiceLogger, connectionValidator, containerDetector, compressionService, encryptionService);
-
 // Crear comando raíz
 var rootCommand = new RootCommand("MongoDB Backup & Restore CLI - Herramienta para gestionar copias de seguridad de MongoDB");
 
 // Crear comando backup
-var backupCommand = CreateBackupCommand(backupService, loggerFactory);
+var backupCommand = CreateBackupCommand();
 rootCommand.AddCommand(backupCommand);
 
 // Crear comando restore
-var restoreCommand = CreateRestoreCommand(restoreService, loggerFactory);
+var restoreCommand = CreateRestoreCommand();
 rootCommand.AddCommand(restoreCommand);
 
 // Ejecutar CLI
 return await rootCommand.InvokeAsync(args);
 
-static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory loggerFactory)
+static Command CreateBackupCommand()
 {
     var command = new Command("backup", "Realiza una copia de seguridad de una base de datos MongoDB");
 
@@ -160,6 +125,12 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
         getDefaultValue: () => Environment.GetEnvironmentVariable("MONGO_ENCRYPTION_KEY"));
     encryptionKeyOption.AddAlias("-k");
 
+    // Opciones de logging
+    var logFileOption = new Option<string?>(
+        name: "--log-file",
+        description: "Ruta del archivo donde guardar los logs. También se puede usar la variable de entorno MONGO_LOG_FILE",
+        getDefaultValue: () => Environment.GetEnvironmentVariable("MONGO_LOG_FILE"));
+
     // Agregar opciones al comando
     command.AddOption(dbOption);
     command.AddOption(outOption);
@@ -176,6 +147,7 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
     command.AddOption(retentionDaysOption);
     command.AddOption(encryptOption);
     command.AddOption(encryptionKeyOption);
+    command.AddOption(logFileOption);
 
     // Handler del comando
     command.SetHandler(async (context) =>
@@ -195,12 +167,35 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
         var retentionDays = context.ParseResult.GetValueForOption(retentionDaysOption);
         var encrypt = context.ParseResult.GetValueForOption(encryptOption);
         var encryptionKey = context.ParseResult.GetValueForOption(encryptionKeyOption);
+        var logFile = context.ParseResult.GetValueForOption(logFileOption);
 
         // Configurar nivel de log según verbosidad
+        var logLevelEnv = Environment.GetEnvironmentVariable("MONGO_LOG_LEVEL");
+        var logLevel = LoggingConfiguration.GetLogLevel(verbose, logLevelEnv);
+        
+        // Crear logger factory con configuración dinámica
+        using var loggerFactory = LoggingConfiguration.CreateLoggerFactory(logLevel, logFile);
+        var logger = loggerFactory.CreateLogger("BackupCommand");
+        
         if (verbose)
         {
-            loggerFactory.CreateLogger("Root").LogInformation("Modo verbose activado");
+            logger.LogDebug("Modo verbose activado");
         }
+        
+        if (!string.IsNullOrWhiteSpace(logFile))
+        {
+            logger.LogInformation("Logs guardándose en archivo: {LogFile}", logFile);
+        }
+
+        // Crear servicios con el logger factory configurado
+        var processRunner = new ProcessRunner(loggerFactory.CreateLogger<ProcessRunner>());
+        var toolsValidator = new MongoToolsValidator(processRunner, loggerFactory.CreateLogger<MongoToolsValidator>());
+        var connectionValidator = new MongoConnectionValidator(processRunner, loggerFactory.CreateLogger<MongoConnectionValidator>());
+        var containerDetector = new DockerContainerDetector(processRunner, loggerFactory.CreateLogger<DockerContainerDetector>());
+        var compressionService = new CompressionService(loggerFactory.CreateLogger<CompressionService>(), processRunner);
+        var encryptionService = new EncryptionService(loggerFactory.CreateLogger<EncryptionService>());
+        var retentionService = new BackupRetentionService(loggerFactory.CreateLogger<BackupRetentionService>());
+        var backupService = new BackupService(processRunner, toolsValidator, loggerFactory.CreateLogger<BackupService>(), connectionValidator, containerDetector, compressionService, retentionService, encryptionService);
 
         // Parsear formato de compresión
         var compressionFormat = CompressionFormat.None;
@@ -285,7 +280,7 @@ static Command CreateBackupCommand(IBackupService backupService, ILoggerFactory 
     return command;
 }
 
-static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFactory loggerFactory)
+static Command CreateRestoreCommand()
 {
     var command = new Command("restore", "Restaura una base de datos MongoDB desde un backup");
 
@@ -381,6 +376,12 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
         getDefaultValue: () => Environment.GetEnvironmentVariable("MONGO_ENCRYPTION_KEY"));
     encryptionKeyOption.AddAlias("-k");
 
+    // Opciones de logging
+    var logFileOption = new Option<string?>(
+        name: "--log-file",
+        description: "Ruta del archivo donde guardar los logs. También se puede usar la variable de entorno MONGO_LOG_FILE",
+        getDefaultValue: () => Environment.GetEnvironmentVariable("MONGO_LOG_FILE"));
+
     // Agregar opciones al comando
     command.AddOption(dbOption);
     command.AddOption(fromOption);
@@ -396,6 +397,7 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
     command.AddOption(verboseOption);
     command.AddOption(compressOption);
     command.AddOption(encryptionKeyOption);
+    command.AddOption(logFileOption);
 
     // Handler del comando
     command.SetHandler(async (context) =>
@@ -414,12 +416,34 @@ static Command CreateRestoreCommand(IRestoreService restoreService, ILoggerFacto
         var verbose = context.ParseResult.GetValueForOption(verboseOption);
         var compress = context.ParseResult.GetValueForOption(compressOption);
         var encryptionKey = context.ParseResult.GetValueForOption(encryptionKeyOption);
+        var logFile = context.ParseResult.GetValueForOption(logFileOption);
 
         // Configurar nivel de log según verbosidad
+        var logLevelEnv = Environment.GetEnvironmentVariable("MONGO_LOG_LEVEL");
+        var logLevel = LoggingConfiguration.GetLogLevel(verbose, logLevelEnv);
+        
+        // Crear logger factory con configuración dinámica
+        using var loggerFactory = LoggingConfiguration.CreateLoggerFactory(logLevel, logFile);
+        var logger = loggerFactory.CreateLogger("RestoreCommand");
+        
         if (verbose)
         {
-            loggerFactory.CreateLogger("Root").LogInformation("Modo verbose activado");
+            logger.LogDebug("Modo verbose activado");
         }
+        
+        if (!string.IsNullOrWhiteSpace(logFile))
+        {
+            logger.LogInformation("Logs guardándose en archivo: {LogFile}", logFile);
+        }
+
+        // Crear servicios con el logger factory configurado
+        var processRunner = new ProcessRunner(loggerFactory.CreateLogger<ProcessRunner>());
+        var toolsValidator = new MongoToolsValidator(processRunner, loggerFactory.CreateLogger<MongoToolsValidator>());
+        var connectionValidator = new MongoConnectionValidator(processRunner, loggerFactory.CreateLogger<MongoConnectionValidator>());
+        var containerDetector = new DockerContainerDetector(processRunner, loggerFactory.CreateLogger<DockerContainerDetector>());
+        var compressionService = new CompressionService(loggerFactory.CreateLogger<CompressionService>(), processRunner);
+        var encryptionService = new EncryptionService(loggerFactory.CreateLogger<EncryptionService>());
+        var restoreService = new RestoreService(processRunner, toolsValidator, loggerFactory.CreateLogger<RestoreService>(), connectionValidator, containerDetector, compressionService, encryptionService);
 
         // Parsear formato de compresión
         var compressionFormat = CompressionFormat.None;
