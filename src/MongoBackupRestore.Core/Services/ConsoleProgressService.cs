@@ -10,12 +10,10 @@ namespace MongoBackupRestore.Core.Services;
 public class ConsoleProgressService : IConsoleProgressService
 {
     private readonly ILogger<ConsoleProgressService> _logger;
-    private readonly bool _isVerbose;
 
     public ConsoleProgressService(ILogger<ConsoleProgressService> logger, bool isVerbose = false)
     {
         _logger = logger;
-        _isVerbose = isVerbose;
     }
 
     /// <inheritdoc />
@@ -99,8 +97,8 @@ public class ConsoleProgressService : IConsoleProgressService
             .BorderColor(Color.Blue)
             .Title(title);
 
-        table.AddColumn("Propiedad");
-        table.AddColumn("Valor");
+        table.AddColumn("Property");
+        table.AddColumn("Value");
 
         foreach (var item in data)
         {
