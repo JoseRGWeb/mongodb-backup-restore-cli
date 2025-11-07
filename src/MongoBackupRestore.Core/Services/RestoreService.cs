@@ -17,6 +17,7 @@ public class RestoreService : IRestoreService
     private readonly IDockerContainerDetector? _containerDetector;
     private readonly ICompressionService? _compressionService;
     private readonly IEncryptionService? _encryptionService;
+    private readonly IConsoleProgressService? _progressService;
     private readonly ILogger<RestoreService> _logger;
 
     public RestoreService(
@@ -26,7 +27,8 @@ public class RestoreService : IRestoreService
         IMongoConnectionValidator? connectionValidator = null,
         IDockerContainerDetector? containerDetector = null,
         ICompressionService? compressionService = null,
-        IEncryptionService? encryptionService = null)
+        IEncryptionService? encryptionService = null,
+        IConsoleProgressService? progressService = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
@@ -34,6 +36,7 @@ public class RestoreService : IRestoreService
         _containerDetector = containerDetector;
         _compressionService = compressionService;
         _encryptionService = encryptionService;
+        _progressService = progressService;
         _logger = logger;
     }
 
@@ -341,10 +344,27 @@ public class RestoreService : IRestoreService
         
         _logger.LogDebug("Comando: {Command} {Arguments}", commandName, arguments);
 
-        var (exitCode, output, error) = await _processRunner.RunProcessAsync(
-            commandName,
-            arguments,
-            cancellationToken);
+        // Ejecutar mongorestore con indicador de progreso
+        int exitCode;
+        string output;
+        string error;
+
+        if (_progressService != null)
+        {
+            var result = await _progressService.ExecuteWithProgressAsync(
+                $"Restaurando la base de datos '{options.Database}'...",
+                async () => await _processRunner.RunProcessAsync(commandName, arguments, cancellationToken));
+            exitCode = result.exitCode;
+            output = result.output;
+            error = result.error;
+        }
+        else
+        {
+            var result = await _processRunner.RunProcessAsync(commandName, arguments, cancellationToken);
+            exitCode = result.exitCode;
+            output = result.output;
+            error = result.error;
+        }
 
         if (exitCode == 0)
         {

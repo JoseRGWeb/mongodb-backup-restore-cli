@@ -195,7 +195,8 @@ static Command CreateBackupCommand()
         var compressionService = new CompressionService(loggerFactory.CreateLogger<CompressionService>(), processRunner);
         var encryptionService = new EncryptionService(loggerFactory.CreateLogger<EncryptionService>());
         var retentionService = new BackupRetentionService(loggerFactory.CreateLogger<BackupRetentionService>());
-        var backupService = new BackupService(processRunner, toolsValidator, loggerFactory.CreateLogger<BackupService>(), connectionValidator, containerDetector, compressionService, retentionService, encryptionService);
+        var progressService = new ConsoleProgressService(loggerFactory.CreateLogger<ConsoleProgressService>(), verbose);
+        var backupService = new BackupService(processRunner, toolsValidator, loggerFactory.CreateLogger<BackupService>(), connectionValidator, containerDetector, compressionService, retentionService, encryptionService, progressService);
 
         // Parsear formato de compresión
         var compressionFormat = CompressionFormat.None;
@@ -236,23 +237,24 @@ static Command CreateBackupCommand()
             if (result.Success)
             {
                 Console.WriteLine();
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("✓ " + result.Message);
-                Console.ResetColor();
-                Console.WriteLine($"Ruta del backup: {result.BackupPath}");
+                progressService.ShowSuccess(result.Message);
+                
+                if (!string.IsNullOrWhiteSpace(result.BackupPath))
+                {
+                    progressService.ShowInfo($"Ruta del backup: {result.BackupPath}");
+                }
+                
                 context.ExitCode = 0;
             }
             else
             {
                 Console.WriteLine();
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("✗ " + result.Message);
-                Console.ResetColor();
+                progressService.ShowError(result.Message);
 
                 if (!string.IsNullOrWhiteSpace(result.Error) && verbose)
                 {
                     Console.WriteLine();
-                    Console.WriteLine("Detalles del error:");
+                    progressService.ShowInfo("Detalles del error:");
                     Console.WriteLine(result.Error);
                 }
 
@@ -262,14 +264,12 @@ static Command CreateBackupCommand()
         catch (Exception ex)
         {
             Console.WriteLine();
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"✗ Error inesperado: {ex.Message}");
-            Console.ResetColor();
+            progressService.ShowError($"Error inesperado: {ex.Message}");
 
             if (verbose)
             {
                 Console.WriteLine();
-                Console.WriteLine("Detalles del error:");
+                progressService.ShowInfo("Detalles del error:");
                 Console.WriteLine(ex.ToString());
             }
 
@@ -443,7 +443,8 @@ static Command CreateRestoreCommand()
         var containerDetector = new DockerContainerDetector(processRunner, loggerFactory.CreateLogger<DockerContainerDetector>());
         var compressionService = new CompressionService(loggerFactory.CreateLogger<CompressionService>(), processRunner);
         var encryptionService = new EncryptionService(loggerFactory.CreateLogger<EncryptionService>());
-        var restoreService = new RestoreService(processRunner, toolsValidator, loggerFactory.CreateLogger<RestoreService>(), connectionValidator, containerDetector, compressionService, encryptionService);
+        var progressService = new ConsoleProgressService(loggerFactory.CreateLogger<ConsoleProgressService>(), verbose);
+        var restoreService = new RestoreService(processRunner, toolsValidator, loggerFactory.CreateLogger<RestoreService>(), connectionValidator, containerDetector, compressionService, encryptionService, progressService);
 
         // Parsear formato de compresión
         var compressionFormat = CompressionFormat.None;
@@ -483,22 +484,18 @@ static Command CreateRestoreCommand()
             if (result.Success)
             {
                 Console.WriteLine();
-                Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("✓ " + result.Message);
-                Console.ResetColor();
+                progressService.ShowSuccess(result.Message);
                 context.ExitCode = 0;
             }
             else
             {
                 Console.WriteLine();
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("✗ " + result.Message);
-                Console.ResetColor();
+                progressService.ShowError(result.Message);
 
                 if (!string.IsNullOrWhiteSpace(result.Error) && verbose)
                 {
                     Console.WriteLine();
-                    Console.WriteLine("Detalles del error:");
+                    progressService.ShowInfo("Detalles del error:");
                     Console.WriteLine(result.Error);
                 }
 
@@ -508,14 +505,12 @@ static Command CreateRestoreCommand()
         catch (Exception ex)
         {
             Console.WriteLine();
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine($"✗ Error inesperado: {ex.Message}");
-            Console.ResetColor();
+            progressService.ShowError($"Error inesperado: {ex.Message}");
 
             if (verbose)
             {
                 Console.WriteLine();
-                Console.WriteLine("Detalles del error:");
+                progressService.ShowInfo("Detalles del error:");
                 Console.WriteLine(ex.ToString());
             }
 
