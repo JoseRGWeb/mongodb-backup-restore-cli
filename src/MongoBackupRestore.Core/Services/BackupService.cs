@@ -17,6 +17,7 @@ public class BackupService : IBackupService
     private readonly ICompressionService? _compressionService;
     private readonly IBackupRetentionService? _retentionService;
     private readonly IEncryptionService? _encryptionService;
+    private readonly IConsoleProgressService? _progressService;
     private readonly ILogger<BackupService> _logger;
 
     public BackupService(
@@ -27,7 +28,8 @@ public class BackupService : IBackupService
         IDockerContainerDetector? containerDetector = null,
         ICompressionService? compressionService = null,
         IBackupRetentionService? retentionService = null,
-        IEncryptionService? encryptionService = null)
+        IEncryptionService? encryptionService = null,
+        IConsoleProgressService? progressService = null)
     {
         _processRunner = processRunner;
         _toolsValidator = toolsValidator;
@@ -36,6 +38,7 @@ public class BackupService : IBackupService
         _compressionService = compressionService;
         _retentionService = retentionService;
         _encryptionService = encryptionService;
+        _progressService = progressService;
         _logger = logger;
     }
 
@@ -203,10 +206,27 @@ public class BackupService : IBackupService
         
         _logger.LogDebug("Comando: {Command} {Arguments}", commandName, arguments);
 
-        var (exitCode, output, error) = await _processRunner.RunProcessAsync(
-            commandName,
-            arguments,
-            cancellationToken);
+        // Ejecutar mongodump con indicador de progreso
+        int exitCode;
+        string output;
+        string error;
+
+        if (_progressService != null)
+        {
+            var result = await _progressService.ExecuteWithProgressAsync(
+                $"Ejecutando backup de la base de datos '{options.Database}'...",
+                async () => await _processRunner.RunProcessAsync(commandName, arguments, cancellationToken));
+            exitCode = result.exitCode;
+            output = result.output;
+            error = result.error;
+        }
+        else
+        {
+            var result = await _processRunner.RunProcessAsync(commandName, arguments, cancellationToken);
+            exitCode = result.exitCode;
+            output = result.output;
+            error = result.error;
+        }
 
         if (exitCode == 0)
         {
@@ -655,12 +675,27 @@ public class BackupService : IBackupService
                 Path.GetDirectoryName(options.OutputPath) ?? ".",
                 $"{Path.GetFileName(options.OutputPath)}_{DateTime.Now:yyyyMMdd_HHmmss}");
 
-            var compressedFilePath = await _compressionService.CompressAsync(
-                options.OutputPath,
-                destinationFile,
-                options.CompressionFormat,
-                message => _logger.LogInformation(message),
-                cancellationToken);
+            string compressedFilePath;
+            if (_progressService != null)
+            {
+                compressedFilePath = await _progressService.ExecuteWithProgressAsync(
+                    $"Comprimiendo backup en formato {options.CompressionFormat}...",
+                    async () => await _compressionService.CompressAsync(
+                        options.OutputPath,
+                        destinationFile,
+                        options.CompressionFormat,
+                        message => _logger.LogInformation(message),
+                        cancellationToken));
+            }
+            else
+            {
+                compressedFilePath = await _compressionService.CompressAsync(
+                    options.OutputPath,
+                    destinationFile,
+                    options.CompressionFormat,
+                    message => _logger.LogInformation(message),
+                    cancellationToken);
+            }
 
             // Eliminar el directorio sin comprimir después de la compresión exitosa
             if (Directory.Exists(options.OutputPath))
@@ -826,12 +861,21 @@ public class BackupService : IBackupService
                 };
             }
 
-            var encryptedFilePath = await _encryptionService.EncryptFileAsync(
-                sourceFile,
-                destinationFile,
-                options.EncryptionKey!,
-                message => _logger.LogInformation(message),
-                cancellationToken);
+            var encryptedFilePath = _progressService != null
+                ? await _progressService.ExecuteWithProgressAsync(
+                    "Cifrando backup con AES-256...",
+                    async () => await _encryptionService.EncryptFileAsync(
+                        sourceFile,
+                        destinationFile,
+                        options.EncryptionKey!,
+                        message => _logger.LogInformation(message),
+                        cancellationToken))
+                : await _encryptionService.EncryptFileAsync(
+                    sourceFile,
+                    destinationFile,
+                    options.EncryptionKey!,
+                    message => _logger.LogInformation(message),
+                    cancellationToken);
 
             // Eliminar el archivo sin cifrar después del cifrado exitoso
             if (File.Exists(sourceFile) && sourceFile != backupPath)
