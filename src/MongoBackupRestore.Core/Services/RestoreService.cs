@@ -113,7 +113,7 @@ public class RestoreService : IRestoreService
         // Descifrar el backup si está cifrado
         string sourcePathToProcess = options.SourcePath;
         string? tempDecryptedPath = null;
-        
+
         if (_encryptionService != null && _encryptionService.IsEncrypted(options.SourcePath))
         {
             var decryptResult = await DecryptBackupAsync(options, cancellationToken);
@@ -128,11 +128,11 @@ public class RestoreService : IRestoreService
         // Descomprimir el backup si está comprimido
         string sourcePathToRestore = sourcePathToProcess;
         string? tempDecompressedPath = null;
-        
+
         if (_compressionService != null)
         {
             var detectedFormat = _compressionService.DetectFormat(sourcePathToProcess);
-            
+
             // Si se detectó un formato comprimido o se especificó explícitamente
             if (detectedFormat != CompressionFormat.None || options.CompressionFormat != CompressionFormat.None)
             {
@@ -158,7 +158,7 @@ public class RestoreService : IRestoreService
             {
                 result = await ExecuteLocalRestoreAsync(options, sourcePathToRestore, cancellationToken);
             }
-            
+
             return result;
         }
         finally
@@ -206,7 +206,7 @@ public class RestoreService : IRestoreService
         }
 
         // Validar que el nombre de la base de datos no contenga caracteres peligrosos
-        if (options.Database.Contains('"') || options.Database.Contains('\'') || 
+        if (options.Database.Contains('"') || options.Database.Contains('\'') ||
             options.Database.Contains(';') || options.Database.Contains('&') ||
             options.Database.Contains('|') || options.Database.Contains('`'))
         {
@@ -234,7 +234,7 @@ public class RestoreService : IRestoreService
         // Validar que el nombre del contenedor no contenga caracteres peligrosos
         if (options.InDocker && !string.IsNullOrWhiteSpace(options.ContainerName))
         {
-            if (options.ContainerName.Contains('"') || options.ContainerName.Contains('\'') || 
+            if (options.ContainerName.Contains('"') || options.ContainerName.Contains('\'') ||
                 options.ContainerName.Contains(';') || options.ContainerName.Contains('&') ||
                 options.ContainerName.Contains('|') || options.ContainerName.Contains('`'))
             {
@@ -250,7 +250,7 @@ public class RestoreService : IRestoreService
         // Validar que el username no contenga caracteres peligrosos
         if (!string.IsNullOrWhiteSpace(options.Username))
         {
-            if (options.Username.Contains('"') || options.Username.Contains('\'') || 
+            if (options.Username.Contains('"') || options.Username.Contains('\'') ||
                 options.Username.Contains(';') || options.Username.Contains('&') ||
                 options.Username.Contains('|') || options.Username.Contains('`'))
             {
@@ -266,7 +266,7 @@ public class RestoreService : IRestoreService
         // Validar que el host no contenga caracteres peligrosos (excepto en URI)
         if (string.IsNullOrWhiteSpace(options.Uri) && !string.IsNullOrWhiteSpace(options.Host))
         {
-            if (options.Host.Contains('"') || options.Host.Contains('\'') || 
+            if (options.Host.Contains('"') || options.Host.Contains('\'') ||
                 options.Host.Contains(';') || options.Host.Contains('&') ||
                 options.Host.Contains('|') || options.Host.Contains('`'))
             {
@@ -341,7 +341,7 @@ public class RestoreService : IRestoreService
 
         var arguments = BuildMongoRestoreArguments(options, sourcePath);
         var commandName = MongoToolsValidator.GetMongoCommandName("mongorestore");
-        
+
         _logger.LogDebug("Comando: {Command} {Arguments}", commandName, arguments);
 
         // Ejecutar mongorestore con indicador de progreso
@@ -403,7 +403,7 @@ public class RestoreService : IRestoreService
 
         // Crear directorio temporal dentro del contenedor
         var tempPath = "/tmp/mongodb-restore";
-        
+
         // Copiar el backup al contenedor
         var copyResult = await CopyBackupToContainerAsync(options, sourcePath, tempPath, cancellationToken);
         if (!copyResult.Success)
@@ -520,7 +520,7 @@ public class RestoreService : IRestoreService
         }
 
         // Base de datos
-        args.Append($"--nsInclude=\"{options.Database}.*\"");
+        args.Append($" --nsInclude \"{options.Database}.*\" ");
 
         // URI o Host/Port
         if (!string.IsNullOrWhiteSpace(options.Uri))
@@ -559,7 +559,7 @@ public class RestoreService : IRestoreService
         }
 
         // Ruta de origen del backup
-        args.Append($" {sourcePath}");
+        args.Append($" \"{sourcePath}\"");
 
         return args.ToString();
     }
@@ -577,7 +577,7 @@ public class RestoreService : IRestoreService
         }
 
         // Base de datos
-        args.Append($" --nsInclude=\"{options.Database}.*\"");
+        args.Append($" --nsInclude \"{options.Database}.*\" ");
 
         // Host siempre es localhost dentro del contenedor
         args.Append(" --host localhost");
@@ -602,7 +602,7 @@ public class RestoreService : IRestoreService
         }
 
         // Ruta de origen temporal en el contenedor
-        args.Append($" {tempPath}");
+        args.Append($" \"{tempPath}\"");
 
         return args.ToString();
     }
@@ -744,8 +744,8 @@ public class RestoreService : IRestoreService
 
         try
         {
-            var format = options.CompressionFormat != CompressionFormat.None 
-                ? options.CompressionFormat 
+            var format = options.CompressionFormat != CompressionFormat.None
+                ? options.CompressionFormat
                 : _compressionService.DetectFormat(sourceFilePath);
 
             if (format == CompressionFormat.None)
@@ -759,7 +759,7 @@ public class RestoreService : IRestoreService
             }
 
             _logger.LogInformation("Descomprimiendo backup desde formato {Format}...", format);
-            
+
             var tempDirectory = Path.Combine(Path.GetTempPath(), $"mongodb-restore-{Guid.NewGuid()}");
             Directory.CreateDirectory(tempDirectory);
 
@@ -840,7 +840,7 @@ public class RestoreService : IRestoreService
             _logger.LogInformation("Descifrando backup...");
 
             var tempDecryptedFile = Path.Combine(
-                Path.GetTempPath(), 
+                Path.GetTempPath(),
                 $"mongodb-restore-decrypted-{Guid.NewGuid()}{Path.GetExtension(options.SourcePath).Replace(".encrypted", "")}");
 
             var success = await _encryptionService.DecryptFileAsync(
