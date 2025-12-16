@@ -24,4 +24,16 @@ public interface IMongoConnectionValidator
         string authenticationDatabase,
         string? uri,
         CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Obtiene el tamaño estimado de la base de datos en bytes
+    /// </summary>
+    Task<long?> GetDatabaseSizeAsync(
+        string host,
+        int port,
+        string? username,
+        string? password,
+        string authenticationDatabase,
+        string databaseName,
+        string? uri,
+        CancellationToken cancellationToken = default);
 }

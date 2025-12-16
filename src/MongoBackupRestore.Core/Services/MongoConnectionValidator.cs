@@ -42,7 +42,7 @@ public class MongoConnectionValidator : IMongoConnectionValidator
             return (true, null);
         }
 
-        var arguments = BuildValidationArguments(host, port, username, password, authenticationDatabase, uri);
+        var arguments = BuildConnectionArguments(host, port, username, password, authenticationDatabase, uri, "db.adminCommand('ping')");
 
         _logger.LogDebug("Ejecutando validación: {Command} {Arguments}", commandName, SanitizeArgumentsForLogging(arguments));
 
@@ -64,6 +64,40 @@ public class MongoConnectionValidator : IMongoConnectionValidator
         return (false, errorMessage);
     }
 
+    /// <inheritdoc />
+    public async Task<long?> GetDatabaseSizeAsync(
+        string host,
+        int port,
+        string? username,
+        string? password,
+        string authenticationDatabase,
+        string databaseName,
+        string? uri,
+        CancellationToken cancellationToken = default)
+    {
+        var commandName = await GetMongoShellCommandNameAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(commandName))
+        {
+            return null;
+        }
+
+        var evalCommand = $"print(db.getSiblingDB('{databaseName}').stats().dataSize)";
+        var arguments = BuildConnectionArguments(host, port, username, password, authenticationDatabase, uri, evalCommand);
+
+        var (exitCode, output, error) = await _processRunner.RunProcessAsync(
+            commandName,
+            arguments,
+            cancellationToken,
+            logError: false);
+
+        if (exitCode == 0 && long.TryParse(output.Trim(), out var size))
+        {
+            return size;
+        }
+
+        return null;
+    }
+
     private async Task<string?> GetMongoShellCommandNameAsync(CancellationToken cancellationToken)
     {
         // Intentar mongosh primero (versión moderna)
@@ -77,7 +111,8 @@ public class MongoConnectionValidator : IMongoConnectionValidator
                 var testResult = await _processRunner.RunProcessAsync(
                     fullCommand,
                     "--version",
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    logError: false).ConfigureAwait(false);
 
                 if (testResult.exitCode == 0)
                 {
@@ -93,13 +128,14 @@ public class MongoConnectionValidator : IMongoConnectionValidator
         return null;
     }
 
-    private string BuildValidationArguments(
+    private string BuildConnectionArguments(
         string host,
         int port,
         string? username,
         string? password,
         string authenticationDatabase,
-        string? uri)
+        string? uri,
+        string evalCommand)
     {
         var args = new StringBuilder();
 
@@ -129,8 +165,8 @@ public class MongoConnectionValidator : IMongoConnectionValidator
             }
         }
 
-        // Ejecutar un comando simple para validar la conexión
-        args.Append(" --eval \"db.adminCommand('ping')\" --quiet");
+        // Ejecutar comando eval
+        args.Append($" --eval \"{evalCommand}\" --quiet");
 
         return args.ToString();
     }
@@ -139,7 +175,7 @@ public class MongoConnectionValidator : IMongoConnectionValidator
     {
         // Ocultar contraseñas en los logs
         var sanitized = arguments;
-        
+
         // Reemplazar contraseñas en URIs
         var uriPasswordPattern = @"://([^:]+):([^@]+)@";
         sanitized = System.Text.RegularExpressions.Regex.Replace(

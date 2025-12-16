@@ -9,17 +9,17 @@ public interface IConsoleProgressService
     /// Inicia una operación con indicador de progreso
     /// </summary>
     /// <param name="description">Descripción de la operación</param>
-    /// <param name="action">Acción a ejecutar</param>
-    Task ExecuteWithProgressAsync(string description, Func<Task> action);
+    /// <param name="action">Acción a ejecutar, recibe una función para actualizar el estado</param>
+    Task ExecuteWithProgressAsync(string description, Func<Action<string>, Task> action);
 
     /// <summary>
     /// Inicia una operación con indicador de progreso y retorna un resultado
     /// </summary>
     /// <typeparam name="T">Tipo del resultado</typeparam>
     /// <param name="description">Descripción de la operación</param>
-    /// <param name="action">Función a ejecutar</param>
+    /// <param name="action">Función a ejecutar, recibe una función para actualizar el estado</param>
     /// <returns>Resultado de la operación</returns>
-    Task<T> ExecuteWithProgressAsync<T>(string description, Func<Task<T>> action);
+    Task<T> ExecuteWithProgressAsync<T>(string description, Func<Action<string>, Task<T>> action);
 
     /// <summary>
     /// Muestra un mensaje de éxito

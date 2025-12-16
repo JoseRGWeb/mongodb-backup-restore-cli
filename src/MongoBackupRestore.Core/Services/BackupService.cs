@@ -154,6 +154,20 @@ public class BackupService : IBackupService
             };
         }
 
+        // Evitar que mongodump se quede esperando un prompt interactivo de contraseña.
+        // Si se usa autenticación por usuario/host/port, exigir password (o alternativamente URI).
+        if (string.IsNullOrWhiteSpace(options.Uri) &&
+            !string.IsNullOrWhiteSpace(options.Username) &&
+            string.IsNullOrWhiteSpace(options.Password))
+        {
+            return new BackupResult
+            {
+                Success = false,
+                Message = "Se especificó --user pero falta --password (o use --uri). Sin contraseña, mongodump puede quedarse esperando entrada interactiva.",
+                ExitCode = 1
+            };
+        }
+
         // La validación del nombre del contenedor se ha movido a después de la auto-detección
         // para permitir que se detecte automáticamente si no se proporciona
 
@@ -201,9 +215,30 @@ public class BackupService : IBackupService
     {
         _logger.LogInformation("Ejecutando backup local...");
 
+        // Obtener tamaño estimado si es posible
+        long? estimatedSize = null;
+        if (_connectionValidator != null)
+        {
+            try
+            {
+                estimatedSize = await _connectionValidator.GetDatabaseSizeAsync(
+                    options.Host, options.Port, options.Username, options.Password,
+                    options.AuthenticationDatabase, options.Database, options.Uri, cancellationToken);
+
+                if (estimatedSize.HasValue)
+                {
+                    _logger.LogInformation("Tamaño estimado de la base de datos: {Size} bytes", estimatedSize);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "No se pudo obtener el tamaño estimado de la base de datos");
+            }
+        }
+
         var arguments = BuildMongoDumpArguments(options);
         var commandName = MongoToolsValidator.GetMongoCommandName("mongodump");
-        
+
         _logger.LogDebug("Comando: {Command} {Arguments}", commandName, arguments);
 
         // Ejecutar mongodump con indicador de progreso
@@ -215,7 +250,90 @@ public class BackupService : IBackupService
         {
             var result = await _progressService.ExecuteWithProgressAsync(
                 $"Ejecutando backup de la base de datos '{options.Database}'...",
-                async () => await _processRunner.RunProcessAsync(commandName, arguments, cancellationToken));
+                async (updateStatus) =>
+                {
+                    // Variables para coordinar el estado
+                    string lastLogMessage = "";
+                    var monitorCts = new CancellationTokenSource();
+                    Task? monitorTask = null;
+
+                    // Iniciar monitor de tamaño si estamos escribiendo a disco (no stdout)
+                    if (!string.IsNullOrWhiteSpace(options.OutputPath))
+                    {
+                        monitorTask = Task.Run(async () =>
+                        {
+                            while (!monitorCts.Token.IsCancellationRequested)
+                            {
+                                try
+                                {
+                                    var currentSize = GetDirectorySize(options.OutputPath);
+                                    string sizeMsg;
+
+                                    if (estimatedSize.HasValue && estimatedSize.Value > 0)
+                                    {
+                                        var percentage = (double)currentSize / estimatedSize.Value * 100;
+                                        if (percentage > 100) percentage = 100;
+                                        sizeMsg = $"Progreso: {FormatSize(currentSize)} / {FormatSize(estimatedSize.Value)} ({percentage:F1}%)";
+                                    }
+                                    else
+                                    {
+                                        sizeMsg = $"Progreso: {FormatSize(currentSize)}";
+                                    }
+
+                                    var statusMsg = string.IsNullOrEmpty(lastLogMessage) ? sizeMsg : $"{sizeMsg} - {lastLogMessage}";
+                                    updateStatus(statusMsg);
+                                }
+                                catch { }
+                                await Task.Delay(1000, monitorCts.Token);
+                            }
+                        }, monitorCts.Token);
+                    }
+
+                    try
+                    {
+                        return await _processRunner.RunProcessAsync(
+                            commandName,
+                            arguments,
+                            cancellationToken,
+                            true,
+                            null,
+                            (stderr) =>
+                            {
+                                if (!string.IsNullOrWhiteSpace(stderr))
+                                {
+                                    var progressLine = stderr.Trim();
+                                    // Capturar líneas de progreso estándar de mongodump
+                                    if (progressLine.Contains("writing") || progressLine.Contains("dumping") || progressLine.Contains("%"))
+                                    {
+                                        var cleanMessage = System.Text.RegularExpressions.Regex.Replace(progressLine, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{4}\s+", "");
+                                        lastLogMessage = cleanMessage;
+
+                                        if (monitorTask == null)
+                                        {
+                                            updateStatus($"Backup en progreso: {cleanMessage}");
+                                        }
+                                    }
+                                    // Capturar errores explícitos para mostrarlos en el estado
+                                    else if (progressLine.Contains("Failed") || progressLine.Contains("Error") || progressLine.Contains("error"))
+                                    {
+                                        var cleanMessage = System.Text.RegularExpressions.Regex.Replace(progressLine, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{4}\s+", "");
+                                        updateStatus($"Error: {cleanMessage}");
+                                        // También loguear como warning para que aparezca en la consola si el nivel de log lo permite
+                                        _logger.LogWarning("mongodump stderr: {Message}", cleanMessage);
+                                    }
+                                }
+                            });
+                    }
+                    finally
+                    {
+                        monitorCts.Cancel();
+                        if (monitorTask != null)
+                        {
+                            try { await monitorTask; } catch { }
+                        }
+                        monitorCts.Dispose();
+                    }
+                });
             exitCode = result.exitCode;
             output = result.output;
             error = result.error;
@@ -255,7 +373,7 @@ public class BackupService : IBackupService
                     return encryptionResult;
                 }
                 backupPath = encryptionResult.BackupPath!;
-                
+
                 if (options.CompressionFormat != CompressionFormat.None)
                 {
                     message = $"Backup completado, comprimido y cifrado exitosamente para la base de datos '{options.Database}'";
@@ -309,10 +427,46 @@ public class BackupService : IBackupService
 
         _logger.LogDebug("Comando: docker exec {Arguments}", arguments);
 
-        var (exitCode, output, error) = await _processRunner.RunProcessAsync(
-            "docker",
-            arguments,
-            cancellationToken);
+        int exitCode;
+        string output;
+        string error;
+
+        if (_progressService != null)
+        {
+            var result = await _progressService.ExecuteWithProgressAsync(
+                $"Ejecutando backup en contenedor '{options.ContainerName}'...",
+                async (updateStatus) =>
+                {
+                    return await _processRunner.RunProcessAsync(
+                        "docker",
+                        arguments,
+                        cancellationToken,
+                        true,
+                        null,
+                        (stderr) =>
+                        {
+                            if (!string.IsNullOrWhiteSpace(stderr))
+                            {
+                                var progressLine = stderr.Trim();
+                                if (progressLine.Contains("writing") || progressLine.Contains("dumping") || progressLine.Contains("%"))
+                                {
+                                    var cleanMessage = System.Text.RegularExpressions.Regex.Replace(progressLine, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{4}\s+", "");
+                                    updateStatus($"Backup en progreso: {cleanMessage}");
+                                }
+                            }
+                        });
+                });
+            exitCode = result.exitCode;
+            output = result.output;
+            error = result.error;
+        }
+        else
+        {
+            var result = await _processRunner.RunProcessAsync("docker", arguments, cancellationToken);
+            exitCode = result.exitCode;
+            output = result.output;
+            error = result.error;
+        }
 
         if (exitCode != 0)
         {
@@ -365,7 +519,7 @@ public class BackupService : IBackupService
                 return encryptionResult;
             }
             backupPath = encryptionResult.BackupPath!;
-            
+
             if (options.CompressionFormat != CompressionFormat.None)
             {
                 successMessage = $"Backup completado, comprimido y cifrado exitosamente para la base de datos '{options.Database}' desde el contenedor '{options.ContainerName}'";
@@ -670,7 +824,7 @@ public class BackupService : IBackupService
         try
         {
             _logger.LogInformation("Iniciando compresión del backup en formato {Format}...", options.CompressionFormat);
-            
+
             var destinationFile = Path.Combine(
                 Path.GetDirectoryName(options.OutputPath) ?? ".",
                 $"{Path.GetFileName(options.OutputPath)}_{DateTime.Now:yyyyMMdd_HHmmss}");
@@ -680,11 +834,15 @@ public class BackupService : IBackupService
             {
                 compressedFilePath = await _progressService.ExecuteWithProgressAsync(
                     $"Comprimiendo backup en formato {options.CompressionFormat}...",
-                    async () => await _compressionService.CompressAsync(
+                    async (updateStatus) => await _compressionService.CompressAsync(
                         options.OutputPath,
                         destinationFile,
                         options.CompressionFormat,
-                        message => _logger.LogInformation(message),
+                        message =>
+                        {
+                            _logger.LogInformation(message);
+                            updateStatus(message);
+                        },
                         cancellationToken));
             }
             else
@@ -813,7 +971,7 @@ public class BackupService : IBackupService
             {
                 // Si es un directorio, primero comprimir en un archivo temporal ZIP
                 _logger.LogInformation("El backup es un directorio. Comprimiendo antes de cifrar...");
-                
+
                 var tempZipFile = Path.Combine(
                     Path.GetDirectoryName(backupPath) ?? ".",
                     $"{Path.GetFileName(backupPath)}_{DateTime.Now:yyyyMMdd_HHmmss}_temp");
@@ -864,11 +1022,15 @@ public class BackupService : IBackupService
             var encryptedFilePath = _progressService != null
                 ? await _progressService.ExecuteWithProgressAsync(
                     "Cifrando backup con AES-256...",
-                    async () => await _encryptionService.EncryptFileAsync(
+                    async (updateStatus) => await _encryptionService.EncryptFileAsync(
                         sourceFile,
                         destinationFile,
                         options.EncryptionKey!,
-                        message => _logger.LogInformation(message),
+                        message =>
+                        {
+                            _logger.LogInformation(message);
+                            updateStatus(message);
+                        },
                         cancellationToken))
                 : await _encryptionService.EncryptFileAsync(
                     sourceFile,
@@ -905,5 +1067,31 @@ public class BackupService : IBackupService
                 ExitCode = 1
             };
         }
+    }
+
+    private long GetDirectorySize(string path)
+    {
+        if (!Directory.Exists(path)) return 0;
+        try
+        {
+            return new DirectoryInfo(path).EnumerateFiles("*", SearchOption.AllDirectories).Sum(fi => fi.Length);
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private string FormatSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        double len = bytes;
+        int order = 0;
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+        return $"{len:0.##} {sizes[order]}";
     }
 }

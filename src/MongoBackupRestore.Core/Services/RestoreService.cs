@@ -228,6 +228,20 @@ public class RestoreService : IRestoreService
             };
         }
 
+        // Evitar que mongorestore se quede esperando un prompt interactivo de contraseña.
+        // Si se usa autenticación por usuario/host/port, exigir password (o alternativamente URI).
+        if (string.IsNullOrWhiteSpace(options.Uri) &&
+            !string.IsNullOrWhiteSpace(options.Username) &&
+            string.IsNullOrWhiteSpace(options.Password))
+        {
+            return new RestoreResult
+            {
+                Success = false,
+                Message = "Se especificó --user pero falta --password (o use --uri). Sin contraseña, mongorestore puede quedarse esperando entrada interactiva.",
+                ExitCode = 1
+            };
+        }
+
         // La validación del nombre del contenedor se ha movido a después de la auto-detección
         // para permitir que se detecte automáticamente si no se proporciona
 
@@ -353,7 +367,27 @@ public class RestoreService : IRestoreService
         {
             var result = await _progressService.ExecuteWithProgressAsync(
                 $"Restaurando la base de datos '{options.Database}'...",
-                async () => await _processRunner.RunProcessAsync(commandName, arguments, cancellationToken));
+                async (updateStatus) =>
+                {
+                    return await _processRunner.RunProcessAsync(
+                        commandName,
+                        arguments,
+                        cancellationToken,
+                        true,
+                        null,
+                        (stderr) =>
+                        {
+                            if (!string.IsNullOrWhiteSpace(stderr))
+                            {
+                                var progressLine = stderr.Trim();
+                                if (progressLine.Contains("restoring") || progressLine.Contains("restored") || progressLine.Contains("%"))
+                                {
+                                    var cleanMessage = System.Text.RegularExpressions.Regex.Replace(progressLine, @"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}[+-]\d{4}\s+", "");
+                                    updateStatus($"Restaurando: {cleanMessage}");
+                                }
+                            }
+                        });
+                });
             exitCode = result.exitCode;
             output = result.output;
             error = result.error;

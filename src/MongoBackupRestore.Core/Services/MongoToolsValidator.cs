@@ -48,7 +48,8 @@ public class MongoToolsValidator : IMongoToolsValidator
             var (exitCode, output, error) = await _processRunner.RunProcessAsync(
                 GetCommandName("mongodump"),
                 "--version",
-                cancellationToken);
+                cancellationToken,
+                logError: false);
 
             if (exitCode == 0)
             {
@@ -71,7 +72,8 @@ public class MongoToolsValidator : IMongoToolsValidator
             var (exitCode, output, error) = await _processRunner.RunProcessAsync(
                 GetCommandName("mongorestore"),
                 "--version",
-                cancellationToken);
+                cancellationToken,
+                logError: false);
 
             if (exitCode == 0)
             {
@@ -94,7 +96,8 @@ public class MongoToolsValidator : IMongoToolsValidator
             var (exitCode, output, error) = await _processRunner.RunProcessAsync(
                 "docker",
                 "--version",
-                cancellationToken);
+                cancellationToken,
+                logError: false);
 
             if (exitCode == 0)
             {
@@ -112,8 +115,8 @@ public class MongoToolsValidator : IMongoToolsValidator
     private static string GetCommandName(string baseCommand)
     {
         // En Windows, los comandos pueden tener extensión .exe
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) 
-            ? $"{baseCommand}.exe" 
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            ? $"{baseCommand}.exe"
             : baseCommand;
     }
 
@@ -142,11 +145,11 @@ public class MongoToolsValidator : IMongoToolsValidator
     private void LogToolsStatus(MongoToolsInfo toolsInfo)
     {
         _logger.LogInformation("=== Estado de herramientas ===");
-        _logger.LogInformation("mongodump: {Status}", 
+        _logger.LogInformation("mongodump: {Status}",
             toolsInfo.MongoDumpAvailable ? $"✓ (v{toolsInfo.MongoDumpVersion})" : "✗ No disponible");
-        _logger.LogInformation("mongorestore: {Status}", 
+        _logger.LogInformation("mongorestore: {Status}",
             toolsInfo.MongoRestoreAvailable ? $"✓ (v{toolsInfo.MongoRestoreVersion})" : "✗ No disponible");
-        _logger.LogInformation("Docker: {Status}", 
+        _logger.LogInformation("Docker: {Status}",
             toolsInfo.DockerAvailable ? $"✓ (v{toolsInfo.DockerVersion})" : "✗ No disponible");
         _logger.LogInformation("==============================");
     }

@@ -24,7 +24,7 @@ public class ConsoleProgressServiceTests
         var description = "Test operation";
 
         // Act
-        await _service.ExecuteWithProgressAsync(description, async () =>
+        await _service.ExecuteWithProgressAsync(description, async (updateStatus) =>
         {
             await Task.Delay(10);
             actionExecuted = true;
@@ -50,7 +50,7 @@ public class ConsoleProgressServiceTests
         var description = "Test operation with result";
 
         // Act
-        var result = await _service.ExecuteWithProgressAsync(description, async () =>
+        var result = await _service.ExecuteWithProgressAsync(description, async (updateStatus) =>
         {
             await Task.Delay(10);
             return expectedResult;

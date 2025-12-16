@@ -30,21 +30,24 @@ public class MongoToolsValidatorTests
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongodump")),
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "mongodump version: 100.9.5", ""));
 
         _mockProcessRunner
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongorestore")),
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ThrowsAsync(new Exception("Not found"));
 
         _mockProcessRunner
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ThrowsAsync(new Exception("Not found"));
 
         // Act
@@ -65,21 +68,24 @@ public class MongoToolsValidatorTests
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongodump")),
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "mongodump version: 100.9.5", ""));
 
         _mockProcessRunner
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongorestore")),
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "mongorestore version: 100.9.5", ""));
 
         _mockProcessRunner
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "Docker version 24.0.7, build afdd53b", ""));
 
         // Act
@@ -102,7 +108,8 @@ public class MongoToolsValidatorTests
             .Setup(x => x.RunProcessAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ThrowsAsync(new Exception("Not found"));
 
         // Act
@@ -114,3 +121,4 @@ public class MongoToolsValidatorTests
         result.DockerAvailable.Should().BeFalse();
     }
 }
+

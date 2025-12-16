@@ -311,7 +311,8 @@ public class RestoreServiceTests : IDisposable
             .Setup(x => x.RunProcessAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "restore completed", ""));
 
         // Act
@@ -338,3 +339,4 @@ public class RestoreServiceTests : IDisposable
         }
     }
 }
+

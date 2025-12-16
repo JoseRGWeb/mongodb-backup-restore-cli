@@ -32,7 +32,8 @@ public class DockerContainerDetectorTests
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "ps --format \"{{.Names}}\" --filter \"ancestor=mongo\"",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "mongo-container\n", ""));
 
         // Act
@@ -51,7 +52,8 @@ public class DockerContainerDetectorTests
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "", ""));
 
         // Act
@@ -69,7 +71,8 @@ public class DockerContainerDetectorTests
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "inspect --format=\"{{.State.Running}}\" test-container",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "true\n", ""));
 
         // Act
@@ -88,7 +91,8 @@ public class DockerContainerDetectorTests
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "inspect --format=\"{{.State.Running}}\" test-container",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "false\n", ""));
 
         // Act
@@ -107,7 +111,8 @@ public class DockerContainerDetectorTests
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "inspect --format=\"{{.State.Running}}\" inexistente",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((1, "", "Error: No such container"));
 
         // Act
@@ -137,7 +142,8 @@ public class DockerContainerDetectorTests
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "inspect --format=\"{{.State.Running}}\" test-container",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "true\n", ""));
 
         // Arrange - mongodump existe
@@ -145,7 +151,8 @@ public class DockerContainerDetectorTests
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "exec test-container sh -c \"command -v mongodump\"",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "/usr/bin/mongodump\n", ""));
 
         // Arrange - mongorestore existe
@@ -153,7 +160,8 @@ public class DockerContainerDetectorTests
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "exec test-container sh -c \"command -v mongorestore\"",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "/usr/bin/mongorestore\n", ""));
 
         // Act
@@ -173,7 +181,8 @@ public class DockerContainerDetectorTests
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "inspect --format=\"{{.State.Running}}\" test-container",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "true\n", ""));
 
         // Arrange - mongodump no existe
@@ -181,7 +190,8 @@ public class DockerContainerDetectorTests
             .Setup(x => x.RunProcessAsync(
                 "docker",
                 "exec test-container sh -c \"command -v mongodump\"",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((1, "", "command not found"));
 
         // Act
@@ -204,3 +214,4 @@ public class DockerContainerDetectorTests
         errorMessage.Should().Contain("no puede estar vacío");
     }
 }
+

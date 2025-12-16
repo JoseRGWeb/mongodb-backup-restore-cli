@@ -17,30 +17,50 @@ public class ConsoleProgressService : IConsoleProgressService
     }
 
     /// <inheritdoc />
-    public async Task ExecuteWithProgressAsync(string description, Func<Task> action)
+    public async Task ExecuteWithProgressAsync(string description, Func<Action<string>, Task> action)
     {
         await AnsiConsole.Status()
             .AutoRefresh(true)
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("green bold"))
-            .StartAsync(description, async ctx =>
+            .StartAsync(Markup.Escape(description), async ctx =>
             {
                 _logger.LogInformation("{Description}", description);
-                await action();
+
+                var lockObj = new object();
+                Action<string> updateStatus = (status) =>
+                {
+                    lock (lockObj)
+                    {
+                        ctx.Status(Markup.Escape(status));
+                    }
+                };
+
+                await action(updateStatus);
             });
     }
 
     /// <inheritdoc />
-    public async Task<T> ExecuteWithProgressAsync<T>(string description, Func<Task<T>> action)
+    public async Task<T> ExecuteWithProgressAsync<T>(string description, Func<Action<string>, Task<T>> action)
     {
         return await AnsiConsole.Status()
             .AutoRefresh(true)
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("green bold"))
-            .StartAsync(description, async ctx =>
+            .StartAsync(Markup.Escape(description), async ctx =>
             {
                 _logger.LogInformation("{Description}", description);
-                return await action();
+
+                var lockObj = new object();
+                Action<string> updateStatus = (status) =>
+                {
+                    lock (lockObj)
+                    {
+                        ctx.Status(Markup.Escape(status));
+                    }
+                };
+
+                return await action(updateStatus);
             });
     }
 
@@ -76,14 +96,14 @@ public class ConsoleProgressService : IConsoleProgressService
     public void ShowPanel(string title, string content)
     {
         _logger.LogInformation("{Title}: {Content}", title, content);
-        
+
         var panel = new Panel(Markup.Escape(content))
         {
             Header = new PanelHeader(title),
             Border = BoxBorder.Rounded,
             BorderStyle = new Style(Color.Green)
         };
-        
+
         AnsiConsole.Write(panel);
     }
 
@@ -91,7 +111,7 @@ public class ConsoleProgressService : IConsoleProgressService
     public void ShowTable(string title, Dictionary<string, string> data)
     {
         _logger.LogInformation("{Title}", title);
-        
+
         var table = new Table()
             .Border(TableBorder.Rounded)
             .BorderColor(Color.Blue)
@@ -103,7 +123,7 @@ public class ConsoleProgressService : IConsoleProgressService
         foreach (var item in data)
         {
             table.AddRow(
-                Markup.Escape(item.Key), 
+                Markup.Escape(item.Key),
                 Markup.Escape(item.Value)
             );
         }

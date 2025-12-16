@@ -29,7 +29,8 @@ public class MongoConnectionValidatorTests
             .Setup(x => x.RunProcessAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((1, "", "command not found"));
 
         // Act
@@ -54,14 +55,16 @@ public class MongoConnectionValidatorTests
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "MongoDB shell version v6.0.0", ""));
 
         _mockProcessRunner
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
                 It.Is<string>(s => s.Contains("db.adminCommand('ping')")),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "{ ok: 1 }", ""));
 
         // Act
@@ -86,14 +89,16 @@ public class MongoConnectionValidatorTests
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "MongoDB shell version v6.0.0", ""));
 
         _mockProcessRunner
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
                 It.Is<string>(s => s.Contains("db.adminCommand('ping')")),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((1, "", "MongoServerError: Authentication failed."));
 
         // Act
@@ -120,14 +125,16 @@ public class MongoConnectionValidatorTests
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "MongoDB shell version v6.0.0", ""));
 
         _mockProcessRunner
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
                 It.Is<string>(s => s.Contains("db.adminCommand('ping')")),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((1, "", "MongoNetworkError: connect ECONNREFUSED 127.0.0.1:27017"));
 
         // Act
@@ -154,14 +161,16 @@ public class MongoConnectionValidatorTests
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "MongoDB shell version v6.0.0", ""));
 
         _mockProcessRunner
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
                 It.Is<string>(s => s.Contains("db.adminCommand('ping')")),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((1, "", "MongoNetworkError: connection timed out"));
 
         // Act
@@ -184,19 +193,21 @@ public class MongoConnectionValidatorTests
     {
         // Arrange
         var uri = "mongodb://user:password@localhost:27017/admin";
-        
+
         _mockProcessRunner
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
                 "--version",
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "MongoDB shell version v6.0.0", ""));
 
         _mockProcessRunner
             .Setup(x => x.RunProcessAsync(
                 It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
                 It.Is<string>(s => s.Contains(uri)),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "{ ok: 1 }", ""));
 
         // Act
@@ -212,4 +223,39 @@ public class MongoConnectionValidatorTests
         success.Should().BeTrue();
         errorMessage.Should().BeNull();
     }
+
+    [Fact]
+    public async Task GetDatabaseSizeAsync_RetornaTamanoCorrecto()
+    {
+        // Arrange
+        _mockProcessRunner
+            .Setup(x => x.RunProcessAsync(
+                It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
+                "--version",
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
+            .ReturnsAsync((0, "MongoDB shell version v6.0.0", ""));
+
+        _mockProcessRunner
+            .Setup(x => x.RunProcessAsync(
+                It.Is<string>(s => s.Contains("mongosh") || s.Contains("mongo")),
+                It.Is<string>(s => s.Contains("stats().dataSize")),
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
+            .ReturnsAsync((0, "1024000", ""));
+
+        // Act
+        var size = await _validator.GetDatabaseSizeAsync(
+            "localhost",
+            27017,
+            "user",
+            "password",
+            "admin",
+            "testdb",
+            null);
+
+        // Assert
+        size.Should().Be(1024000);
+    }
 }
+

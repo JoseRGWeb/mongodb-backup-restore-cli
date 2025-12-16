@@ -21,7 +21,10 @@ public class ProcessRunner : IProcessRunner
     public async Task<(int exitCode, string output, string error)> RunProcessAsync(
         string fileName,
         string arguments,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool logError = true,
+        Action<string>? onOutput = null,
+        Action<string>? onError = null)
     {
         // lgtm[cs/cleartext-storage-of-sensitive-information]
         // NOTA DE SEGURIDAD: Los argumentos pueden contener credenciales porque mongodump/mongorestore
@@ -52,6 +55,7 @@ public class ProcessRunner : IProcessRunner
             {
                 outputBuilder.AppendLine(e.Data);
                 _logger.LogTrace("STDOUT: {Data}", e.Data);
+                onOutput?.Invoke(e.Data);
             }
         };
 
@@ -61,6 +65,7 @@ public class ProcessRunner : IProcessRunner
             {
                 errorBuilder.AppendLine(e.Data);
                 _logger.LogTrace("STDERR: {Data}", e.Data);
+                onError?.Invoke(e.Data);
             }
         };
 
@@ -82,7 +87,14 @@ public class ProcessRunner : IProcessRunner
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al ejecutar el proceso: {FileName}", fileName);
+            if (logError)
+            {
+                _logger.LogError(ex, "Error al ejecutar el proceso: {FileName}", fileName);
+            }
+            else
+            {
+                _logger.LogDebug(ex, "Error al ejecutar el proceso (esperado): {FileName}", fileName);
+            }
             throw;
         }
     }

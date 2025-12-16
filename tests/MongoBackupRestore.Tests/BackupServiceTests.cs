@@ -238,7 +238,8 @@ public class BackupServiceTests
             .Setup(x => x.RunProcessAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<bool>(), It.IsAny<System.Action<string>?>(), It.IsAny<System.Action<string>?>()))
             .ReturnsAsync((0, "backup completed", ""));
 
         // Act
@@ -256,3 +257,4 @@ public class BackupServiceTests
             It.IsAny<CancellationToken>()), Times.Once);
     }
 }
+
