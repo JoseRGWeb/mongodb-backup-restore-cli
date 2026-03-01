@@ -13,6 +13,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MongoBackupRestore.Tests", "tests\MongoBackupRestore.Tests\MongoBackupRestore.Tests.csproj", "{C080D1C8-1765-49AA-83C6-302B873EDC83}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MongoBackupRestore.McpServer", "src\MongoBackupRestore.McpServer\MongoBackupRestore.McpServer.csproj", "{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,6 +61,18 @@ Global
 		{C080D1C8-1765-49AA-83C6-302B873EDC83}.Release|x64.Build.0 = Release|Any CPU
 		{C080D1C8-1765-49AA-83C6-302B873EDC83}.Release|x86.ActiveCfg = Release|Any CPU
 		{C080D1C8-1765-49AA-83C6-302B873EDC83}.Release|x86.Build.0 = Release|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Debug|x64.Build.0 = Debug|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Debug|x86.Build.0 = Debug|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Release|x64.ActiveCfg = Release|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Release|x64.Build.0 = Release|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Release|x86.ActiveCfg = Release|Any CPU
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -67,5 +81,6 @@ Global
 		{7FD042C5-A381-49FD-A9FE-5CE520F0FABF} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{B8286669-05C3-4985-9F54-555E793653E7} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{C080D1C8-1765-49AA-83C6-302B873EDC83} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{19D85E02-FE40-4174-BD92-4B7A4CCBD3EF} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

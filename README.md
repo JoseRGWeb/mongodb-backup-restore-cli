@@ -27,6 +27,7 @@ Este proyecto sigue buenas prácticas de repositorios, versionado semántico y c
 - **Logs estructurados y niveles de verbosidad** ✓
 - **Integración CI/CD con GitHub Actions** ✓
 - **Distribución como .NET global tool** ✓
+- **Servidor MCP (Model Context Protocol) para agentes de IA** ✓
 
 ## Requisitos
 - .NET SDK 8.0 o superior
@@ -475,9 +476,59 @@ La herramienta proporciona mensajes claros en caso de problemas:
 - Se recomienda comprimir antes de cifrar para optimizar el tamaño
 - Use claves desde variables de entorno para evitar escribirlas en logs
 
+## Servidor MCP (Model Context Protocol)
+
+El proyecto incluye un servidor MCP que permite a **agentes de IA** (como GitHub Copilot, Claude, Cursor u otros clientes MCP) realizar backups y restauraciones de MongoDB directamente desde conversaciones.
+
+### Herramientas disponibles
+
+| Herramienta | Descripción |
+|---|---|
+| `mongodb_backup` | Realiza una copia de seguridad de una base de datos MongoDB |
+| `mongodb_restore` | Restaura una base de datos MongoDB desde un backup existente |
+
+### Ejecutar el servidor MCP
+
+```bash
+dotnet run --project src/MongoBackupRestore.McpServer/MongoBackupRestore.McpServer.csproj
+```
+
+El servidor usa transporte **STDIO** (stdin/stdout), compatible con cualquier cliente MCP estándar.
+
+### Configuración en clientes MCP
+
+Añade la siguiente configuración a tu cliente MCP (p. ej., `mcp.json` o `settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "mongodb-backup-restore": {
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "ruta/a/src/MongoBackupRestore.McpServer/MongoBackupRestore.McpServer.csproj"
+      ]
+    }
+  }
+}
+```
+
+> **Nota**: Sustituye `ruta/a/` por la ruta absoluta al directorio del repositorio clonado.
+
+### Ejemplos de uso con agentes IA
+
+Una vez configurado el servidor MCP, puedes pedir al agente:
+
+- *"Haz un backup de la base de datos 'myapp' en /backups/2025-01-01"*
+- *"Restaura la base de datos 'myapp' desde /backups/2025-01-01"*
+- *"Realiza un backup con compresión zip y cifrado AES-256"*
+- *"Restaura el backup cifrado usando la clave de entorno"*
+
 ## Arquitectura (propuesta)
 - `MongoBackupRestore.Core`: abstracciones y servicios para orquestar `mongodump`/`mongorestore` de forma cross-platform, compresión, logging y validaciones.
 - `MongoBackupRestore.Cli`: interfaz de línea de comandos usando `System.CommandLine`, mapeo de opciones/variables de entorno y UX.
+- `MongoBackupRestore.McpServer`: servidor MCP (Model Context Protocol) que expone las herramientas `mongodb_backup` y `mongodb_restore` para agentes de IA.
 - `MongoBackupRestore.Tests`: pruebas unitarias/funcionales (con fixtures de Docker para pruebas locales).
 
 Patrones clave:
@@ -490,6 +541,7 @@ Estructura sugerida:
 /src
   /MongoBackupRestore.Core
   /MongoBackupRestore.Cli
+  /MongoBackupRestore.McpServer
 /tests
   /MongoBackupRestore.Tests
 /.github
@@ -591,6 +643,7 @@ Para más detalles, consulta [CONTRIBUTING.md](CONTRIBUTING.md).
 - CI/CD con GitHub Actions (build, test y releases). ✓
 - **Publicación como .NET global tool**. ✓
 - **Documentación completa con ejemplos end-to-end**. ✓
+- **Servidor MCP para agentes de IA (`mongodb_backup` y `mongodb_restore`)**. ✓
 
 ## Licencia
 MIT. Ver [LICENSE](./LICENSE).
