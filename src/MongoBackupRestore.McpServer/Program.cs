@@ -5,15 +5,31 @@ using ModelContextProtocol.Server;
 using MongoBackupRestore.Core.Services;
 using MongoBackupRestore.McpServer;
 
-var builder = Host.CreateApplicationBuilder(args);
+// Usar CreateEmptyApplicationBuilder para tener control total sobre los proveedores de logging.
+// Con CreateApplicationBuilder, .NET registra ConsoleLoggerProvider por defecto que escribe a stdout
+// e interfiere con el transporte STDIO del MCP (JSON-RPC).
+var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings
+{
+    Args = args,
+    ApplicationName = "MongoBackupRestore.McpServer"
+});
 
-// Configurar logging (stderr para no interferir con el transporte STDIO del MCP)
+// Configurar logging SOLO a stderr para no interferir con el transporte STDIO del MCP.
+// - Nivel Information para nuestros servicios (inicio, fin, hitos)
+// - Nivel Warning para el ProcessRunner (evitar loguear comandos con credenciales en Debug)
+// - Suprimir logs del SDK MCP y del Host genérico
 builder.Logging.AddConsole(options =>
 {
     options.FormatterName = "simple";
-    options.LogToStandardErrorThreshold = LogLevel.Trace;
+    options.LogToStandardErrorThreshold = LogLevel.Trace; // TODO va a stderr
 });
 builder.Logging.SetMinimumLevel(LogLevel.Warning);
+builder.Logging.AddFilter("MongoBackupRestore.Core.Services.BackupService", LogLevel.Information);
+builder.Logging.AddFilter("MongoBackupRestore.Core.Services.RestoreService", LogLevel.Information);
+builder.Logging.AddFilter("MongoBackupRestore.Core.Services.ProcessRunner", LogLevel.Warning);
+builder.Logging.AddFilter("MongoBackupRestore.McpServer", LogLevel.Information);
+builder.Logging.AddFilter("Microsoft.Hosting", LogLevel.Warning);
+builder.Logging.AddFilter("ModelContextProtocol", LogLevel.Warning);
 
 // Registrar servicios del Core
 builder.Services.AddSingleton<MongoBackupRestore.Core.Interfaces.IProcessRunner>(sp =>
@@ -46,7 +62,7 @@ builder.Services.AddSingleton<MongoBackupRestore.Core.Interfaces.IBackupRetentio
     new BackupRetentionService(sp.GetRequiredService<ILogger<BackupRetentionService>>()));
 
 builder.Services.AddSingleton<MongoBackupRestore.Core.Interfaces.IConsoleProgressService>(sp =>
-    new ConsoleProgressService(sp.GetRequiredService<ILogger<ConsoleProgressService>>(), false));
+    new SilentProgressService(sp.GetRequiredService<ILogger<SilentProgressService>>()));
 
 builder.Services.AddSingleton<MongoBackupRestore.Core.Interfaces.IBackupService>(sp =>
     new BackupService(

@@ -54,7 +54,11 @@ public class ProcessRunner : IProcessRunner
             if (e.Data != null)
             {
                 outputBuilder.AppendLine(e.Data);
-                _logger.LogTrace("STDOUT: {Data}", e.Data);
+                // No loguear mensajes de progreso para evitar warnings del MCP
+                if (!IsProgressMessage(e.Data))
+                {
+                    _logger.LogTrace("STDOUT: {Data}", e.Data);
+                }
                 onOutput?.Invoke(e.Data);
             }
         };
@@ -64,7 +68,11 @@ public class ProcessRunner : IProcessRunner
             if (e.Data != null)
             {
                 errorBuilder.AppendLine(e.Data);
-                _logger.LogTrace("STDERR: {Data}", e.Data);
+                // No loguear mensajes de progreso para evitar warnings del MCP
+                if (!IsProgressMessage(e.Data))
+                {
+                    _logger.LogTrace("STDERR: {Data}", e.Data);
+                }
                 onError?.Invoke(e.Data);
             }
         };
@@ -97,6 +105,22 @@ public class ProcessRunner : IProcessRunner
             }
             throw;
         }
+    }
+
+    /// <summary>
+    /// Detecta si una línea es un mensaje de progreso de mongodump/mongorestore
+    /// </summary>
+    private static bool IsProgressMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return false;
+
+        // Detectar mensajes de progreso por patrones comunes
+        return message.Contains("Progreso:") ||
+               message.Contains("%") && message.Contains("[") ||
+               System.Text.RegularExpressions.Regex.IsMatch(message, @"^\s*[\w.]+\s+\d+/\d+\s+\(\d+\.\d+%\)") || // colección X/Y (%)  
+               message.Contains("###") || // barras de progreso
+               (message.Contains("/") && message.Contains("(") && message.Contains(")") && message.Contains("%")); // formato 123/456 (78.9%)
     }
 
     /// <summary>

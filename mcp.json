@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mongodb-backup-restore": {
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "/Users/jrweb/Documents/DesarrolloGit/mongodb-backup-restore-cli/src/MongoBackupRestore.McpServer/MongoBackupRestore.McpServer.csproj"
+      ]
+    }
+  }
+}
